@@ -3,7 +3,9 @@ const TaxGroup = require('../models/TaxGroup');
 // Get all tax groups
 exports.getAllTaxGroups = async (req, res) => {
     try {
-        const taxGroups = await TaxGroup.find().populate('tax_rate_ids');
+        const taxGroups = await TaxGroup.find()
+                          .populate('tax_rate_ids')
+                          .sort({ createdAt: -1 });
 
         const result = taxGroups.map(taxGroup => {
             const totalTaxRate = taxGroup.tax_rate_ids.reduce((sum, rate) => sum + (rate.tax_rate || 0), 0);

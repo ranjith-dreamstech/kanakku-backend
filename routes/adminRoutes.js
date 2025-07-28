@@ -7,6 +7,7 @@ const CategoryController = require('../controllers/CategoryController');
 const TaxRateController = require('../controllers/TaxRateController');
 const TaxGroupController = require('../controllers/TaxGroupController');
 const ProductController = require('../controllers/ProductController');
+const SupplierController = require('@controllers/Admin/Purchases/SupplierController');
 const protect = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 const { uploadSingle, uploadMultiple, uploadProductFields } = require('../middleware/uploadProductImages');
@@ -16,13 +17,15 @@ const { createCategoryValidator, updateCategoryValidator } = require('../validat
 const { createTaxRateValidator, updateTaxRateValidator } = require('../validators/taxRateValidator');
 const { createTaxGroupValidator, updateTaxGroupValidator } = require('../validators/taxGroupValidator');
 const { createProductValidator, updateProductValidator } = require('../validators/productValidator');
+const { updateProfileValidator } = require('../validators/updateProfileValidator');
+const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
 router.get('/states/:countryId', protect, adminController.getStates);
 router.get('/cities/:stateId', protect, adminController.getCities);
 router.get('/profile', protect, adminController.getProfile);
-router.put('/profile', protect, upload.single('profileImage'), adminController.updateProfile);
+router.put('/profile', protect, upload.single('profileImage'), updateProfileValidator, adminController.updateProfile);
 
 //Unit routes
 router.get('/units', protect, UnitsController.getUnits);
@@ -81,4 +84,8 @@ router.get('/product-categories', protect, ProductController.getAllProductCatego
 router.get('/product-brands', protect, ProductController.getAllProductBrands);
 router.get('/product-units', protect, ProductController.getAllUnits);
 router.get('/product-taxes', protect, ProductController.getAllTaxGroups);
+
+//suppliers routes
+router.post('/suppliers', protect, createSupplierValidator, SupplierController.createSupplier);
+
 module.exports = router;

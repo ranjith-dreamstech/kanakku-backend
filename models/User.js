@@ -39,13 +39,19 @@ const userSchema = new mongoose.Schema(
       type: String,
     },
     country: {
-      type: String,
+      type: mongoose.Schema.Types.Int32,
+      ref: 'Country',
+      required: true,
     },
     state: {
-      type: String,
+      type: mongoose.Schema.Types.Int32,
+      ref: 'State',
+      required: true,
     },
     city: {
-      type: String,
+      type: mongoose.Schema.Types.Int32,
+      ref: 'City',
+      required: true,
     },
     postalCode: {
       type: String,

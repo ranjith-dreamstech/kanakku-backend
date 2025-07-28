@@ -14,7 +14,6 @@ exports.dashboard = async (req, res) => {
 exports.getCountries = async (req, res) => {
   try {
     const countries = await Country.find({}, { _id: 1, name: 1 }).lean();
-    console.log(countries);
     res.json(countries);
   } catch (err) {
     res.status(500).json({ message: 'Error fetching countries', error: err.message });
@@ -45,7 +44,7 @@ exports.getCities = async (req, res) => {
 exports.getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user).select('-password');
-    if(!user){
+    if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     res.json(user.toJSON());
@@ -53,48 +52,45 @@ exports.getProfile = async (req, res) => {
     res.status(500).json({ message: 'Error fetching user profile', error: err.message });
   }
 };
-//updateProfile 
+// updateProfile
 exports.updateProfile = async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      gender,
-      address,
-      city,
-      country,
-      dateOfBirth,
-      phone,
-      state,
-      postalCode,
-    } = req.body;
+    // List of fields that are allowed to be updated from the request body
+    const allowedFields = [
+      'firstName',
+      'lastName',
+      'email',
+      'gender',
+      'address',
+      'city',
+      'country',
+      'dateOfBirth',
+      'phone',
+      'state',
+      'postalCode',
+    ];
 
-    const updateData = {
-      firstName,
-      lastName,
-      email,
-      gender,
-      address,
-      city,
-      country,
-      dateOfBirth,
-      phone,
-      state,
-      postalCode,
-    };
+    const updateData = {};
 
-    // Attach uploaded profile image
+    // Only add fields to updateData if they exist in the request body
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    });
+
+    // Handle the profile image upload separately
     if (req.file) {
+      // Make sure the uploads directory is served statically by Express
       updateData.profileImage = `/uploads/${req.file.filename}`;
     }
-    console.log('user id' +req.user);
-    const updatedUser = await User.findOneAndUpdate(
-    { _id: req.user }, // works for both ObjectId or string
-    updateData,
-    { new: true }
-    );
 
+    // Find the user and update only the provided data
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user, // Assuming req.user is the full user object from your auth middleware
+      { $set: updateData }, // Use $set to ensure only specified fields are updated
+      { new: true, runValidators: true, context: 'query' }
+    );
 
     if (!updatedUser) {
       return res.status(404).json({ message: 'User not found' });
@@ -106,10 +102,16 @@ exports.updateProfile = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    // Handle potential duplicate key errors from the validator
+    if (err.code === 11000) {
+      return res.status(409).json({
+        message: 'Email address is already in use.',
+        error: err.message,
+      });
+    }
     res.status(500).json({
       message: 'Error updating user profile',
       error: err.message,
     });
   }
 };
-
