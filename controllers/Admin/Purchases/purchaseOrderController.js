@@ -137,6 +137,67 @@ const createPurchaseOrder = async (req, res) => {
     }
 };
 
+const listUsersByType = async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { search } = req.query;
+
+    // Validate type parameter
+    if (![1, 2].includes(Number(type))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user type. Must be 1 (regular) or 2 (supplier)'
+      });
+    }
+
+    // Build the query
+    const query = { user_type: Number(type) };
+
+    // Add search condition if search query exists
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+        { phone: searchRegex }
+      ];
+    }
+
+    const users = await User.find(query)
+      .select('-password -__v')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      data: users.map(user => ({
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        user_type: user.user_type,
+        profileImage: user.profileImageUrl, // Using virtual
+        address: user.address,
+        balance: user.balance,
+        balance_type: user.balance_type,
+        createdAt: user.createdAt
+      }))
+    });
+
+  } catch (err) {
+    console.error('Error listing users:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve users',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
+
 module.exports = {
-    createPurchaseOrder
+    createPurchaseOrder,
+    listUsersByType
 };

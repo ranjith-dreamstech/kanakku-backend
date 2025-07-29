@@ -96,5 +96,6 @@ router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 
 //purchaseOrder
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
+router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType);
 
 module.exports = router;

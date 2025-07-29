@@ -27,8 +27,8 @@ const createSupplier = async (req, res) => {
 
         // Create User for supplier
         const user = new User({
-            firstName: firstName || supplier_name.split(' ')[0] || 'Supplier',
-            lastName: lastName || supplier_name.split(' ')[1] || 'User',
+            firstName: firstName || supplier_name.split(' ')[0] || '',
+            lastName: lastName || supplier_name.split(' ')[1] || '',
             email: supplier_email,
             phone: supplier_phone,
             password: password || 'defaultPassword123',
