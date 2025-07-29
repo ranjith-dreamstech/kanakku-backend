@@ -1,8 +1,9 @@
 const { body, validationResult } = require("express-validator");
+const mongoose = require('mongoose');
 const Supplier = require("@models/Supplier");
 const User = require("@models/User");
 
-
+// Validation middleware
 exports.createSupplierValidator = [
     body("supplier_name")
         .trim()
@@ -26,7 +27,7 @@ exports.createSupplierValidator = [
             }
             return true;
         }),
-    body("supplier_phone"),
+    
     body("supplier_phone")
         .trim()
         .notEmpty()
@@ -39,11 +40,17 @@ exports.createSupplierValidator = [
         .optional()
         .isNumeric()
         .withMessage("Balance must be a valid number"),
+        
     body("balance_type")
         .trim()
         .optional()
         .isIn(["credit", "debit"])
         .withMessage("Balance type must be either 'credit' or 'debit'"),
+        
+    body("password")
+        .optional()
+        .isLength({ min: 6 })
+        .withMessage("Password must be at least 6 characters long"),
 
     (req, res, next) => {
         const errors = validationResult(req);

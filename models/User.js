@@ -1,4 +1,3 @@
-// models/User.js
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -23,7 +22,6 @@ const userSchema = new mongoose.Schema(
     gender: {
       type: String,
       enum: ['male', 'female', 'other'],
-      required: true,
     },
     dateOfBirth: {
       type: Date,
@@ -41,20 +39,30 @@ const userSchema = new mongoose.Schema(
     country: {
       type: mongoose.Schema.Types.Int32,
       ref: 'Country',
-      required: true,
     },
     state: {
       type: mongoose.Schema.Types.Int32,
       ref: 'State',
-      required: true,
     },
     city: {
       type: mongoose.Schema.Types.Int32,
       ref: 'City',
-      required: true,
     },
     postalCode: {
       type: String,
+    },
+    user_type: {
+      type: Number,
+      required: true,
+      default: 1, // 1 for regular user, 2 for supplier
+    },
+    balance: {
+      type: Number,
+      default: 0
+    },
+    balance_type: {
+      type: String,
+      enum: ['credit', 'debit']
     },
   },
   {
@@ -80,7 +88,6 @@ userSchema.virtual('profileImageUrl').get(function () {
   }
   return `http://127.0.0.1:5000${this.profileImage}`;
 });
-
 
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
