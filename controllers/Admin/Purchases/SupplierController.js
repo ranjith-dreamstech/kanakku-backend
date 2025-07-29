@@ -10,7 +10,7 @@ const createSupplier = async (req, res) => {
             supplier_name, 
             supplier_email, 
             supplier_phone, 
-            balance, 
+            balance = 0, // Default to 0 if not provided
             balance_type,
             firstName,
             lastName,
@@ -27,16 +27,21 @@ const createSupplier = async (req, res) => {
         // Get the uploaded file path
         const profileImage = req.file ? req.file.path : undefined;
 
+        // Split supplier name if firstName/lastName not provided
+        const nameParts = supplier_name.split(' ');
+        const defaultFirstName = nameParts[0] || '';
+        const defaultLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
         // Create User for supplier
         const user = new User({
-            firstName: firstName || supplier_name.split(' ')[0] || '',
-            lastName: lastName || supplier_name.split(' ')[1] || '',
+            firstName: firstName || defaultFirstName,
+            lastName: lastName || defaultLastName,
             email: supplier_email,
             phone: supplier_phone,
             password: password || 'defaultPassword123',
             user_type: 2, // 2 for supplier
-            balance: balance || 0,
-            balance_type: balance_type || 'credit',
+            balance: Number(balance),
+            balance_type: balance == 0 ? null : (balance_type || 'credit'), // Null if balance is 0
             gender,
             dateOfBirth,
             address,
@@ -44,32 +49,43 @@ const createSupplier = async (req, res) => {
             state,
             city,
             postalCode,
-            profileImage // Add the image path to the user
+            profileImage
         });
 
         await user.save();
         
         res.status(201).json({ 
-            message: 'Supplier user created successfully', 
+            success: true,
+            message: 'Supplier created successfully', 
             data: {
-                user: {
-                    id: user._id,
-                    email: user.email,
-                    user_type: user.user_type,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    phone: user.phone,
-                    profileImage: user.profileImage // Include in response
-                }
+                id: user._id,
+                supplier_name: `${user.firstName} ${user.lastName}`,
+                supplier_email: user.email,
+                supplier_phone: user.phone,
+                balance: user.balance,
+                balance_type: user.balance_type,
+                profileImage: user.profileImage ? 
+                    `${req.protocol}://${req.get('host')}/${user.profileImage.replace(/\\/g, '/')}` : 
+                    null
             }
         });
     } catch (err) {
+        // Clean up uploaded file if error occurs
+        if (req.file && req.file.path) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (fileErr) {
+                console.error('Error cleaning up profile image:', fileErr);
+            }
+        }
+        
+        console.error('Supplier creation error:', err);
         res.status(500).json({ 
             message: 'Error creating supplier user',
             error: err.message 
         });
     }
-}
+};
 
 //list
 const listSuppliers = async (req, res) => {

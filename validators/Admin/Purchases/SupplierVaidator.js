@@ -39,13 +39,25 @@ exports.createSupplierValidator = [
         .trim()
         .optional()
         .isNumeric()
-        .withMessage("Balance must be a valid number"),
+        .withMessage("Balance must be a valid number")
+        .custom((value, { req }) => {
+            if (value == 0) {
+                req.body.balance_type = null;
+            }
+            return true;
+        }),
         
     body("balance_type")
         .trim()
         .optional()
-        .isIn(["credit", "debit"])
-        .withMessage("Balance type must be either 'credit' or 'debit'"),
+        .custom((value, { req }) => {
+            if (req.body.balance && req.body.balance != 0) {
+                if (!['credit', 'debit'].includes(value)) {
+                    throw new Error("Balance type must be either 'credit' or 'debit'");
+                }
+            }
+            return true;
+        }),
         
     body("password")
         .optional()
