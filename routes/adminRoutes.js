@@ -8,6 +8,7 @@ const TaxRateController = require('../controllers/TaxRateController');
 const TaxGroupController = require('../controllers/TaxGroupController');
 const ProductController = require('../controllers/ProductController');
 const SupplierController = require('@controllers/Admin/Purchases/SupplierController');
+const purchaseOrderController = require('@controllers/Admin/Purchases/purchaseOrderController');
 const protect = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 const { uploadSingle, uploadMultiple, uploadProductFields } = require('../middleware/uploadProductImages');
@@ -19,6 +20,8 @@ const { createTaxGroupValidator, updateTaxGroupValidator } = require('../validat
 const { createProductValidator, updateProductValidator } = require('../validators/productValidator');
 const { updateProfileValidator } = require('../validators/updateProfileValidator');
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
+const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
+
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -90,5 +93,8 @@ router.post('/suppliers', protect, upload.single('profileImage'), createSupplier
 router.get('/suppliers', protect, SupplierController.listSuppliers);
 router.put('/suppliers/:id', protect, upload.single('profileImage'), SupplierController.updateSupplier);
 router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
+
+//purchaseOrder
+router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
 
 module.exports = router;
