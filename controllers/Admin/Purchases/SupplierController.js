@@ -139,37 +139,72 @@ const listSuppliers = async (req, res) => {
 const updateSupplier = async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+        let updates = req.body;
         
-        // Handle file upload if exists
-        if (req.file) {
-            updates.profileImage = req.file.path;
-        }
-
-        // Prevent changing user_type or email
-        if (updates.user_type || updates.email) {
-            return res.status(400).json({
-                message: "Cannot change user type or email"
-            });
-        }
-
-        const updatedUser = await User.findOneAndUpdate(
-            { _id: id, user_type: 2 }, // Only update suppliers
-            updates,
-            { new: true, runValidators: true }
-        ).select('-password -__v');
-
-        if (!updatedUser) {
+        // First get the existing user to handle image cleanup
+        const existingUser = await User.findOne({ _id: id, user_type: 2 });
+        
+        if (!existingUser) {
             return res.status(404).json({
                 message: "Supplier not found"
             });
         }
 
+        // Handle file upload if exists
+        if (req.file) {
+            // Delete old image if it exists
+            if (existingUser.profileImage && fs.existsSync(existingUser.profileImage)) {
+                fs.unlinkSync(existingUser.profileImage);
+            }
+            updates.profileImage = req.file.path;
+        }
+
+        // Prevent changing critical fields
+        const restrictedFields = ['user_type', 'email', '_id', 'password'];
+        restrictedFields.forEach(field => {
+            if (updates[field]) {
+                delete updates[field];
+            }
+        });
+
+        // Transform supplier_name to firstName and lastName if provided
+        if (updates.supplier_name) {
+            const names = updates.supplier_name.split(' ');
+            updates.firstName = names[0] || existingUser.firstName;
+            updates.lastName = names[1] || existingUser.lastName;
+            delete updates.supplier_name;
+        }
+
+        // Update the user
+        const updatedUser = await User.findOneAndUpdate(
+            { _id: id, user_type: 2 },
+            updates,
+            { new: true, runValidators: true }
+        ).select('-password -__v');
+
+        // Format the response
+        const responseData = {
+            id: updatedUser._id,
+            supplier_name: `${updatedUser.firstName} ${updatedUser.lastName}`,
+            supplier_email: updatedUser.email,
+            supplier_phone: updatedUser.phone,
+            balance: updatedUser.balance,
+            balance_type: updatedUser.balance_type,
+            profileImage: updatedUser.profileImage ? 
+                `${req.protocol}://${req.get('host')}/${updatedUser.profileImage}` : 
+                null
+        };
+
         res.status(200).json({
             message: 'Supplier updated successfully',
-            data: updatedUser
+            data: responseData
         });
     } catch (err) {
+        // Remove uploaded file if error occurs
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        
         res.status(500).json({ 
             message: 'Error updating supplier',
             error: err.message 
