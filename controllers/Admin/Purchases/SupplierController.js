@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('@models/User');
+const fs = require('fs'); // Add this at the top of your file
+const path = require('path'); // Useful for path operations
 
 //create
 const createSupplier = async (req, res) => {
@@ -150,11 +152,36 @@ const updateSupplier = async (req, res) => {
             });
         }
 
+        // Handle profile image removal if requested
+        if (updates.profile_image_removed === true) {
+            try {
+                if (existingUser.profileImage) {
+                    const fullPath = path.join(process.cwd(), existingUser.profileImage);
+                    if (fs.existsSync(fullPath)) {
+                        fs.unlinkSync(fullPath);
+                    }
+                }
+                updates.profileImage = null; // Set profileImage to null
+            } catch (err) {
+                console.error('Error removing profile image:', err);
+                // Continue even if deletion fails
+            }
+            delete updates.profile_image_removed; // Remove this field from updates
+        }
+
         // Handle file upload if exists
         if (req.file) {
             // Delete old image if it exists
-            if (existingUser.profileImage && fs.existsSync(existingUser.profileImage)) {
-                fs.unlinkSync(existingUser.profileImage);
+            if (existingUser.profileImage) {
+                try {
+                    const fullPath = path.join(process.cwd(), existingUser.profileImage);
+                    if (fs.existsSync(fullPath)) {
+                        fs.unlinkSync(fullPath);
+                    }
+                } catch (err) {
+                    console.error('Error deleting old profile image:', err);
+                    // Continue even if deletion fails
+                }
             }
             updates.profileImage = req.file.path;
         }
@@ -171,7 +198,7 @@ const updateSupplier = async (req, res) => {
         if (updates.supplier_name) {
             const names = updates.supplier_name.split(' ');
             updates.firstName = names[0] || existingUser.firstName;
-            updates.lastName = names[1] || existingUser.lastName;
+            updates.lastName = names.length > 1 ? names.slice(1).join(' ') : existingUser.lastName;
             delete updates.supplier_name;
         }
 
@@ -182,6 +209,16 @@ const updateSupplier = async (req, res) => {
             { new: true, runValidators: true }
         ).select('-password -__v');
 
+        if (!updatedUser) {
+            // Remove uploaded file if update failed
+            if (req.file && fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
+            return res.status(404).json({
+                message: "Supplier not found or update failed"
+            });
+        }
+
         // Format the response
         const responseData = {
             id: updatedUser._id,
@@ -191,7 +228,7 @@ const updateSupplier = async (req, res) => {
             balance: updatedUser.balance,
             balance_type: updatedUser.balance_type,
             profileImage: updatedUser.profileImage ? 
-                `${req.protocol}://${req.get('host')}/${updatedUser.profileImage}` : 
+                `${req.protocol}://${req.get('host')}/${updatedUser.profileImage.replace(/\\/g, '/')}` : 
                 null
         };
 
@@ -202,15 +239,20 @@ const updateSupplier = async (req, res) => {
     } catch (err) {
         // Remove uploaded file if error occurs
         if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (fileErr) {
+                console.error('Error cleaning up uploaded file:', fileErr);
+            }
         }
         
+        console.error('Supplier update error:', err);
         res.status(500).json({ 
             message: 'Error updating supplier',
-            error: err.message 
+            error: process.env.NODE_ENV === 'development' ? err.message : undefined
         });
     }
-}
+};
 
 // Delete supplier
 const deleteSupplier = async (req, res) => {
