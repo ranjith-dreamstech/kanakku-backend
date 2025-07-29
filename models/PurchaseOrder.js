@@ -1,9 +1,8 @@
 const mongoose = require('mongoose');
 
 const purchaseOrderSchema = new mongoose.Schema({
-  purchaseOrderId: {
+   purchaseOrderId: {
     type: String,
-    required: true,
     unique: true
   },
   vendorId: {
@@ -135,12 +134,18 @@ const purchaseOrderSchema = new mongoose.Schema({
 });
 
 // Pre-save hook to generate purchase order ID
-purchaseOrderSchema.pre('save', async function(next) {
+purchaseOrderSchema.pre('validate', async function(next) {
   if (!this.purchaseOrderId) {
-    const count = await this.constructor.countDocuments();
-    this.purchaseOrderId = `PO-${String(count + 1).padStart(6, '0')}`;
+    try {
+      const count = await this.constructor.countDocuments();
+      this.purchaseOrderId = `PO-${String(count + 1).padStart(6, '0')}`;
+      next();
+    } catch (err) {
+      next(err);
+    }
+  } else {
+    next();
   }
-  next();
 });
 
 module.exports = mongoose.model('PurchaseOrder', purchaseOrderSchema);
