@@ -196,8 +196,69 @@ const listUsersByType = async (req, res) => {
   }
 };
 
+const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate ID format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format'
+      });
+    }
+
+    // Find user by ID
+    const user = await User.findById(id)
+      .select('-password -__v'); // Exclude sensitive fields
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Format response
+    const responseData = {
+      id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phone: user.phone,
+      user_type: user.user_type,
+      profileImage: user.profileImageUrl, // Using virtual property
+      address: user.address,
+      country: user.country,
+      state: user.state,
+      city: user.city,
+      postalCode: user.postalCode,
+      gender: user.gender,
+      dateOfBirth: user.dateOfBirth,
+      balance: user.balance,
+      balance_type: user.balance_type,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+
+    res.status(200).json({
+      success: true,
+      data: responseData
+    });
+
+  } catch (err) {
+    console.error('Error fetching user:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve user details',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+};
+
 
 module.exports = {
     createPurchaseOrder,
-    listUsersByType
+    listUsersByType,
+    getUserById
 };

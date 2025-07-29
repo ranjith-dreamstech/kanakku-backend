@@ -169,7 +169,7 @@ const updateSupplier = async (req, res) => {
         }
 
         // Handle profile image removal if requested
-        if (updates.profile_image_removed === true) {
+        if (updates.profile_image_removed === "true") {
             try {
                 if (existingUser.profileImage) {
                     const fullPath = path.join(process.cwd(), existingUser.profileImage);
