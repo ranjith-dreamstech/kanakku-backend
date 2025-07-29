@@ -96,13 +96,17 @@ const listSuppliers = async (req, res) => {
             .skip((page - 1) * limit)
             .limit(Number(limit));
 
+        // Transform the data to match your desired format
         const suppliers = users.map(user => ({
+            id: user._id, // Include the user ID
             supplier_name: `${user.firstName} ${user.lastName}`,
             supplier_email: user.email,
             supplier_phone: user.phone,
             balance: user.balance,
             balance_type: user.balance_type,
-            profileImage: user.profileImage,
+            profileImage: user.profileImage 
+                ? `${req.protocol}://${req.get('host')}/${user.profileImage}`
+                : `${req.protocol}://${req.get('host')}/uploads/default-profile.jpg`,
             address: user.address,
             country: user.country,
             state: user.state,

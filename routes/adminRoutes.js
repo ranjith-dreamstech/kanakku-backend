@@ -89,7 +89,6 @@ router.get('/product-taxes', protect, ProductController.getAllTaxGroups);
 router.post('/suppliers', protect, upload.single('profileImage'), createSupplierValidator, SupplierController.createSupplier);
 router.get('/suppliers', protect, SupplierController.listSuppliers);
 router.put('/suppliers/:id', protect, upload.single('profileImage'), SupplierController.updateSupplier);
-
 router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 
 module.exports = router;
