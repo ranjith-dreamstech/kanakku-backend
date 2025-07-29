@@ -90,11 +90,27 @@ const listSuppliers = async (req, res) => {
         const total = await User.countDocuments(searchQuery);
 
         // Get paginated results
-        const suppliers = await User.find(searchQuery)
+        const users = await User.find(searchQuery)
             .select('-password -__v') // Exclude sensitive fields
             .sort({ createdAt: -1 }) // Sort by newest first
             .skip((page - 1) * limit)
             .limit(Number(limit));
+
+        const suppliers = users.map(user => ({
+            supplier_name: `${user.firstName} ${user.lastName}`,
+            supplier_email: user.email,
+            supplier_phone: user.phone,
+            balance: user.balance,
+            balance_type: user.balance_type,
+            profileImage: user.profileImage,
+            address: user.address,
+            country: user.country,
+            state: user.state,
+            city: user.city,
+            postalCode: user.postalCode,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+        }));
 
         res.status(200).json({
             message: 'Suppliers fetched successfully',
