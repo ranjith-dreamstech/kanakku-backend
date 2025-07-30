@@ -25,9 +25,22 @@ const getCompanySettings = async (req, res) => {
             });
         }
 
+        const settingsData = settings.toObject();
+        
+        const imageFields = ['siteLogo', 'favicon', 'companyLogo'];
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        
+        imageFields.forEach(field => {
+            if (settingsData[field]) {
+                // Remove any leading slashes or backslashes before joining with base URL
+                const cleanedPath = settingsData[field].replace(/^[\\/]+/, '');
+                settingsData[field] = `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
+            }
+        });
+
         res.status(200).json({
             success: true,
-            data: settings
+            data: settingsData
         });
     } catch (err) {
         console.error('Get company settings error:', err);
