@@ -7,7 +7,7 @@ const path = require('path');
 const createSignature = async (req, res) => {
     try {
         const { signatureName, markAsDefault = false } = req.body;
-        const userId = req.user._id; // Assuming user is authenticated and ID is available
+        const userId = req.user; // Assuming user is authenticated and ID is available
         
         // Check if user exists
         const user = await User.findById(userId);
