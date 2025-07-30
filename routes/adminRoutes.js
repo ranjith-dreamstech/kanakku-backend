@@ -10,6 +10,7 @@ const ProductController = require('../controllers/ProductController');
 const SupplierController = require('@controllers/Admin/Purchases/SupplierController');
 const purchaseOrderController = require('@controllers/Admin/Purchases/purchaseOrderController');
 const SignatureController = require('../controllers/SignatureController');
+const BankDetailController = require('@controllers/bankDetailController');
 const protect = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 const { uploadSingle, uploadMultiple, uploadProductFields } = require('../middleware/uploadProductImages');
@@ -23,6 +24,7 @@ const { updateProfileValidator } = require('../validators/updateProfileValidator
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
+const { createBankDetailValidator } = require('@validators/bankDetailValidator');
 
 
 router.get('/', protect, adminController.dashboard);
@@ -100,6 +102,7 @@ router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
 router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType);
 router.get('/user/:id', protect, purchaseOrderController.getUserById);
+router.get('/productsrecent', protect, purchaseOrderController.getRecentProductsWithSearch);
 //signature
 router.post('/signatures', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.createSignature);
 router.get('/signatures', protect, SignatureController.getUserSignatures);
@@ -107,5 +110,7 @@ router.put('/signatures/:signatureId', protect, upload.single('signatureImage'),
 router.delete('/signatures/:signatureId', protect, SignatureController.deleteSignature);
 router.patch('/signatures/set-default/:signatureId', protect, SignatureController.setAsDefaultSignature);
 router.patch('/signatures/status/:signatureId', protect, SignatureController.updateSignatureStatus);
+//bankDetails
+router.post('/bank-details', protect, createBankDetailValidator, BankDetailController.createBankDetail);
 
 module.exports = router;

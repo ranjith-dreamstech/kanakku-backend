@@ -255,10 +255,58 @@ const getUserById = async (req, res) => {
     });
   }
 };
+const getRecentProductsWithSearch = async (req, res) => {
+    try {
+        const { search = '' } = req.query;
+        
+        // Build search query
+        const searchQuery = {
+            $or: [
+                { product_name: { $regex: search, $options: 'i' } },
+                { product_code: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ]
+        };
+
+        // Get products - if search is empty, get last 10, otherwise get all matching
+        const products = await Product.find(search ? searchQuery : {})
+            .populate('category', 'category_name')
+            .populate('brand', 'brand_name')
+            .sort({ createdAt: -1 })
+            .limit(search ? 0 : 10); // No limit when searching
+
+        // Format response
+        const formattedProducts = products.map(product => ({
+            id: product._id,
+            name: product.product_name,
+            code: product.product_code,
+            price: product.price,
+            stock: product.stock,
+            category: product.category?.category_name || null,
+            brand: product.brand?.brand_name || null,
+            image: product.image_url || null,
+            createdAt: product.createdAt
+        }));
+
+        res.status(200).json({
+            message: search 
+                ? 'Search results for products' 
+                : 'Last 10 products retrieved',
+            data: formattedProducts,
+            count: formattedProducts.length
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            message: 'Server error', 
+            error: error.message 
+        });
+    }
+};
 
 
 module.exports = {
     createPurchaseOrder,
     listUsersByType,
-    getUserById
+    getUserById,
+    getRecentProductsWithSearch
 };
