@@ -25,7 +25,7 @@ const { updateProfileValidator } = require('../validators/updateProfileValidator
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
-const { createBankDetailValidator, updateBankDetailValidator } = require('@validators/bankDetailValidator');
+const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
 
 router.get('/', protect, adminController.dashboard);
@@ -116,6 +116,7 @@ router.post('/bank-accounts', protect, createBankDetailValidator, BankDetailCont
 router.get('/bank-accounts', protect, BankDetailController.listBankDetails);
 router.put('/bank-accounts/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
 router.delete('/bank-accounts/:id', protect, BankDetailController.deleteBankDetail);
+router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankDetailController.updateBankDetailStatus);
 //companySetting
 // Get company settings
 router.get('company/:userId', CompanySettings.getCompanySettings);

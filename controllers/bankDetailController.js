@@ -174,6 +174,51 @@ const listBankDetails = async (req, res) => {
     }
 };
 
+// Update bank detail status only
+const updateBankDetailStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        // Validate status is provided and is boolean
+        if (typeof status !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'Status must be a boolean value'
+            });
+        }
+
+        const bankDetail = await BankDetail.findByIdAndUpdate(
+            id,
+            { $set: { status } },
+            { new: true }
+        );
+
+        if (!bankDetail || bankDetail.isDeleted) {
+            return res.status(404).json({
+                success: false,
+                message: 'Bank detail not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Bank detail status updated successfully',
+            data: {
+                id: bankDetail._id,
+                status: bankDetail.status
+            }
+        });
+    } catch (err) {
+        console.error('Bank detail status update error:', err);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error updating bank detail status',
+            error: err.message 
+        });
+    }
+};
+
 // Soft delete bank detail
 const deleteBankDetail = async (req, res) => {
     try {
@@ -211,5 +256,6 @@ module.exports = {
     updateBankDetail,
     getBankDetail,
     listBankDetails,
+    updateBankDetailStatus,
     deleteBankDetail
 };

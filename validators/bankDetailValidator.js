@@ -181,3 +181,27 @@ exports.idValidator = [
         }),
     validate
 ];
+// Status update validation
+exports.updateBankDetailStatusValidator = [
+    param("id")
+        .notEmpty()
+        .withMessage("Bank detail ID is required")
+        .custom(async (value) => {
+            if (!mongoose.Types.ObjectId.isValid(value)) {
+                throw new Error("Invalid bank detail ID format");
+            }
+            const bankDetail = await BankDetail.findOne({ _id: value, isDeleted: false });
+            if (!bankDetail) {
+                throw new Error("Bank detail not found");
+            }
+            return true;
+        }),
+
+    body("status")
+        .notEmpty()
+        .withMessage("Status is required")
+        .isBoolean()
+        .withMessage("Status must be a boolean value"),
+        
+    validate
+];
