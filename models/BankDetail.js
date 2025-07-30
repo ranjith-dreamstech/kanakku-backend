@@ -31,6 +31,10 @@ const bankDetailSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    status: {
+        type: Boolean,
+        default: true
+    },
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -60,5 +64,6 @@ const bankDetailSchema = new mongoose.Schema({
 bankDetailSchema.index({ userId: 1 });
 bankDetailSchema.index({ accountNumber: 1 }, { unique: true });
 bankDetailSchema.index({ isDeleted: 1 });
+bankDetailSchema.index({ status: 1 });
 
 module.exports = mongoose.model('BankDetail', bankDetailSchema);

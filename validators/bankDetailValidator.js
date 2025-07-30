@@ -87,7 +87,12 @@ exports.createBankDetailValidator = [
             }
             return true;
         }),
+    body("status")
+        .optional()
+        .isBoolean()
+        .withMessage("Status must be a boolean value"),
     validate
+    
 ];
 
 // Update validation
@@ -156,7 +161,11 @@ exports.updateBankDetailValidator = [
         .withMessage("IFSC code must be at least 5 characters")
         .isLength({ max: 20 })
         .withMessage("IFSC code cannot exceed 20 characters"),
-    validate
+    body("status")
+        .optional()
+        .isBoolean()
+        .withMessage("Status must be a boolean value"),
+    validate    
 ];
 
 // ID validation (for get and delete)

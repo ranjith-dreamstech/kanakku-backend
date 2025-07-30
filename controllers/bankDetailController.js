@@ -11,7 +11,8 @@ const createBankDetail = async (req, res) => {
             branchName,
             accountNumber,
             IFSCCode,
-            userId
+            userId,
+            status = true // Default to true if not provided
         } = req.body;
 
         // Check if user exists
@@ -31,6 +32,7 @@ const createBankDetail = async (req, res) => {
             accountNumber,
             IFSCCode,
             userId,
+            status,
             isDeleted: false
         });
 
@@ -97,7 +99,10 @@ const getBankDetail = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const bankDetail = await BankDetail.findOne({ _id: id, isDeleted: false });
+        const bankDetail = await BankDetail.findOne({ 
+            _id: id, 
+            isDeleted: false 
+        });
 
         if (!bankDetail) {
             return res.status(404).json({
@@ -119,14 +124,14 @@ const getBankDetail = async (req, res) => {
         });
     }
 };
-
 // List all bank details (with pagination)
 const listBankDetails = async (req, res) => {
     try {
-        const { page = 1, limit = 10, userId } = req.query;
+        const { page = 1, limit = 10, userId, status } = req.query;
         const skip = (page - 1) * limit;
 
         const query = { isDeleted: false };
+        
         if (userId) {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
                 return res.status(400).json({
@@ -135,6 +140,10 @@ const listBankDetails = async (req, res) => {
                 });
             }
             query.userId = userId;
+        }
+
+        if (status !== undefined) {
+            query.status = status === 'true';
         }
 
         const [bankDetails, total] = await Promise.all([

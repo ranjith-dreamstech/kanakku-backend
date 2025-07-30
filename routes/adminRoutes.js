@@ -11,6 +11,7 @@ const SupplierController = require('@controllers/Admin/Purchases/SupplierControl
 const purchaseOrderController = require('@controllers/Admin/Purchases/purchaseOrderController');
 const SignatureController = require('../controllers/SignatureController');
 const BankDetailController = require('@controllers/bankDetailController');
+const CompanySettings = require('@controllers/CompanySettingsController');
 const protect = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 const { uploadSingle, uploadMultiple, uploadProductFields } = require('../middleware/uploadProductImages');
@@ -25,7 +26,7 @@ const { createSupplierValidator } = require('../validators/Admin/Purchases/Suppl
 const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
 const { createBankDetailValidator, updateBankDetailValidator } = require('@validators/bankDetailValidator');
-
+const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -115,5 +116,11 @@ router.post('/bank-details', protect, createBankDetailValidator, BankDetailContr
 router.get('/bank-details', protect, BankDetailController.listBankDetails);
 router.put('/bank-details/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
 router.delete('/bank-details/:id', protect, BankDetailController.deleteBankDetail);
+//companySetting
+// Get company settings
+router.get('company/:userId', CompanySettings.getCompanySettings);
+
+// Update company settings (will create if doesn't exist)
+router.put('company/:userId', updateCompanySettingsValidator, CompanySettings.updateCompanySettings);
 
 module.exports = router;
