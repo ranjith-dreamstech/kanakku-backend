@@ -70,7 +70,7 @@ const createSignature = async (req, res) => {
 // Get all signatures for a user
 const getUserSignatures = async (req, res) => {
     try {
-        const userId = req.user._id;
+        const userId = req.user;
         
         const signatures = await Signature.find({ 
             userId, 
@@ -108,7 +108,7 @@ const updateSignature = async (req, res) => {
     try {
         const { signatureId } = req.params;
         const { signatureName, markAsDefault, status } = req.body;
-        const userId = req.user._id;
+        const userId = req.user;
 
         // Find the signature
         const signature = await Signature.findOne({
@@ -191,7 +191,7 @@ const updateSignature = async (req, res) => {
 const deleteSignature = async (req, res) => {
     try {
         const { signatureId } = req.params;
-        const userId = req.user._id;
+        const userId = req.user;
 
         // Find and soft delete the signature
         const signature = await Signature.findOneAndUpdate(

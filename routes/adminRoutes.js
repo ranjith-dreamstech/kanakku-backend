@@ -105,7 +105,6 @@ router.post('/signatures', protect, upload.single('signatureImage'), createSigna
 // Get all signatures for the authenticated user
 router.get('/signatures', protect, SignatureController.getUserSignatures);
 
-// Update a signature
 router.put(
     '/signatures/:signatureId', 
     protect, 
@@ -114,6 +113,5 @@ router.put(
     SignatureController.updateSignature
 );
 
-// Delete a signature (soft delete)
 router.delete('/signatures/:signatureId', protect, SignatureController.deleteSignature);
 module.exports = router;
