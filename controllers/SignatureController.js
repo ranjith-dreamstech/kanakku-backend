@@ -69,18 +69,71 @@ const createSignature = async (req, res) => {
 const getUserSignatures = async (req, res) => {
     try {
         const userId = req.user;
-        
-        const signatures = await Signature.find({ 
+        const { 
+            page = 1, 
+            limit = 10, 
+            search = '',
+            status,
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = req.query;
+
+        // Validate pagination parameters
+        const pageNumber = parseInt(page);
+        const limitNumber = parseInt(limit);
+        if (isNaN(pageNumber) || pageNumber < 1) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid page number'
+            });
+        }
+        if (isNaN(limitNumber) || limitNumber < 1 || limitNumber > 100) {
+            return res.status(400).json({
+                success: false,
+                message: 'Limit must be between 1 and 100'
+            });
+        }
+
+        // Build query
+        const query = { 
             userId, 
             isDeleted: false 
-        }).sort({ createdAt: -1 });
+        };
+
+        // Add search filter
+        if (search) {
+            query.signatureName = { 
+                $regex: search, 
+                $options: 'i' // case insensitive
+            };
+        }
+
+        // Add status filter if provided
+        if (status !== undefined) {
+            query.status = status === 'true';
+        }
+
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+        // Get total count for pagination info
+        const total = await Signature.countDocuments(query);
+
+        // Get paginated results
+        const signatures = await Signature.find(query)
+            .sort(sort)
+            .skip((pageNumber - 1) * limitNumber)
+            .limit(limitNumber);
 
         const baseUrl = `${req.protocol}://${req.get('host')}/`;
         
         const formattedSignatures = signatures.map(sig => ({
             id: sig._id,
             signatureName: sig.signatureName,
-            signatureImage: baseUrl + sig.signatureImage.replace(/\\/g, '/'),
+            signatureImage: sig.signatureImage 
+                ? `${baseUrl}${sig.signatureImage.replace(/\\/g, '/')}`
+                : null,
             status: sig.status,
             markAsDefault: sig.markAsDefault,
             createdAt: sig.createdAt,
@@ -89,14 +142,22 @@ const getUserSignatures = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: formattedSignatures
+            data: formattedSignatures,
+            pagination: {
+                total,
+                page: pageNumber,
+                limit: limitNumber,
+                totalPages: Math.ceil(total / limitNumber),
+                hasNextPage: pageNumber * limitNumber < total,
+                hasPreviousPage: pageNumber > 1
+            }
         });
     } catch (err) {
         console.error('Error fetching signatures:', err);
         res.status(500).json({
             success: false,
             message: 'Error fetching signatures',
-            error: err.message
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
         });
     }
 };
@@ -241,10 +302,170 @@ const deleteSignature = async (req, res) => {
         });
     }
 };
+// Set a signature as default
+const setAsDefaultSignature = async (req, res) => {
+    try {
+        const { signatureId } = req.params;
+        const userId = req.user;
+
+        // Find the signature
+        const signature = await Signature.findOne({
+            _id: signatureId,
+            userId,
+            isDeleted: false
+        });
+
+        if (!signature) {
+            return res.status(404).json({
+                success: false,
+                message: 'Signature not found or you dont have permission'
+            });
+        }
+
+        // If already default, return success
+        if (signature.markAsDefault) {
+            return res.status(200).json({
+                success: true,
+                message: 'Signature is already set as default'
+            });
+        }
+
+        // Transaction to ensure atomic update
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
+        try {
+            // Remove default from all other signatures
+            await Signature.updateMany(
+                { userId, markAsDefault: true },
+                { $set: { markAsDefault: false } },
+                { session }
+            );
+
+            // Set this signature as default
+            signature.markAsDefault = true;
+            await signature.save({ session });
+
+            // Update user's default signature reference
+            await User.findByIdAndUpdate(
+                userId,
+                { defaultSignature: signature._id },
+                { session }
+            );
+
+            await session.commitTransaction();
+            
+            res.status(200).json({
+                success: true,
+                message: 'Signature set as default successfully',
+                data: {
+                    id: signature._id,
+                    signatureName: signature.signatureName,
+                    markAsDefault: signature.markAsDefault
+                }
+            });
+        } catch (transactionError) {
+            await session.abortTransaction();
+            throw transactionError;
+        } finally {
+            session.endSession();
+        }
+    } catch (err) {
+        console.error('Set default signature error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error setting signature as default',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
+// Update signature status
+const updateSignatureStatus = async (req, res) => {
+    try {
+        const { signatureId } = req.params;
+        const { status } = req.body;
+        const userId = req.user;
+
+        // Validate status
+        if (typeof status !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'Status must be a boolean value'
+            });
+        }
+
+        // Find and update the signature
+        const signature = await Signature.findOneAndUpdate(
+            {
+                _id: signatureId,
+                userId,
+                isDeleted: false
+            },
+            { 
+                status,
+                // If disabling, also unset as default
+                ...(status === false && { markAsDefault: false })
+            },
+            { new: true }
+        );
+
+        if (!signature) {
+            return res.status(404).json({
+                success: false,
+                message: 'Signature not found or you dont have permission'
+            });
+        }
+
+        // If this was the default signature and we're disabling it,
+        // find a new default signature
+        if (status === false && signature.markAsDefault) {
+            const newDefault = await Signature.findOne({
+                userId,
+                isDeleted: false,
+                status: true
+            }).sort({ createdAt: -1 });
+
+            if (newDefault) {
+                newDefault.markAsDefault = true;
+                await newDefault.save();
+                await User.findByIdAndUpdate(userId, {
+                    defaultSignature: newDefault._id
+                });
+            } else {
+                // No other signatures, remove default reference
+                await User.findByIdAndUpdate(userId, {
+                    $unset: { defaultSignature: 1 }
+                });
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Signature status updated successfully',
+            data: {
+                id: signature._id,
+                signatureName: signature.signatureName,
+                status: signature.status,
+                markAsDefault: signature.markAsDefault
+            }
+        });
+    } catch (err) {
+        console.error('Update signature status error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating signature status',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
 
 module.exports = {
     createSignature,
     getUserSignatures,
     updateSignature,
-    deleteSignature
+    deleteSignature,
+    setAsDefaultSignature,
+    updateSignatureStatus
 };
