@@ -27,7 +27,7 @@ const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOr
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
 const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
-
+const multer = require('multer');
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
 router.get('/states/:countryId', protect, adminController.getStates);
@@ -117,11 +117,36 @@ router.get('/bank-accounts', protect, BankDetailController.listBankDetails);
 router.put('/bank-accounts/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
 router.delete('/bank-accounts/:id', protect, BankDetailController.deleteBankDetail);
 router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankDetailController.updateBankDetailStatus);
-//companySetting
+// Configure storage for company files
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, '../public/uploads/company'));
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+
+
+
+// Define the fields for multiple file uploads
+const uploadFields = upload.fields([
+  { name: 'siteLogo', maxCount: 1 },
+  { name: 'favicon', maxCount: 1 },
+  { name: 'companyLogo', maxCount: 1 }
+]);
+
 // Get company settings
 router.get('/company-details/:userId', CompanySettings.getCompanySettings);
 
-// Update company settings (will create if doesn't exist)
-router.put('/company-details/:userId', updateCompanySettingsValidator, CompanySettings.updateCompanySettings);
+// Update company settings with multiple file upload support
+router.put(
+  '/company-details/:userId',
+  uploadFields,
+  updateCompanySettingsValidator,
+  CompanySettings.updateCompanySettings
+);
 
 module.exports = router;

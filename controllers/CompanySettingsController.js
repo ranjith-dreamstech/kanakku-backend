@@ -1,8 +1,9 @@
 const CompanySettings = require('@models/CompanySettings');
 const mongoose = require('mongoose');
 const User = require('@models/User');
+const fs = require('fs');
+const path = require('path');
 
-// Get company settings (single entry)
 const getCompanySettings = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -38,7 +39,21 @@ const getCompanySettings = async (req, res) => {
     }
 };
 
-// Update company settings (upsert - create if not exists)
+// Helper function to delete old files
+const deleteOldFile = async (filePath) => {
+  if (filePath) {
+    try {
+      const fullPath = path.join(__dirname, '..', filePath);
+      if (fs.existsSync(fullPath)) {
+        fs.unlinkSync(fullPath);
+      }
+    } catch (err) {
+      console.error('Error deleting old file:', err);
+    }
+  }
+};
+
+// Update company settings (with file handling)
 const updateCompanySettings = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -60,13 +75,35 @@ const updateCompanySettings = async (req, res) => {
             });
         }
 
-        // Remove fields that shouldn't be updated
-        delete updates._id;
-        delete updates.userId;
-        delete updates.createdAt;
-        delete updates.updatedAt;
+        // Get current settings
+        const currentSettings = await CompanySettings.findOne({ userId }) || {};
 
-        // Find and update or create new
+        // Process uploaded files
+        if (req.files) {
+            // Handle site logo
+            if (req.files.siteLogo) {
+                await deleteOldFile(currentSettings.siteLogo);
+                updates.siteLogo = `/uploads/company/${req.files.siteLogo[0].filename}`;
+            }
+
+            // Handle favicon
+            if (req.files.favicon) {
+                await deleteOldFile(currentSettings.favicon);
+                updates.favicon = `/uploads/company/${req.files.favicon[0].filename}`;
+            }
+
+            // Handle company logo
+            if (req.files.companyLogo) {
+                await deleteOldFile(currentSettings.companyLogo);
+                updates.companyLogo = `/uploads/company/${req.files.companyLogo[0].filename}`;
+            }
+        }
+
+        // Remove protected fields
+        const protectedFields = ['_id', 'userId', 'createdAt', 'updatedAt'];
+        protectedFields.forEach(field => delete updates[field]);
+
+        // Update or create settings
         const settings = await CompanySettings.findOneAndUpdate(
             { userId },
             { $set: updates },
@@ -83,8 +120,21 @@ const updateCompanySettings = async (req, res) => {
             message: 'Company settings updated successfully',
             data: settings
         });
+
     } catch (err) {
         console.error('Update company settings error:', err);
+        
+        // Clean up uploaded files if error occurred
+        if (req.files) {
+            for (const fileType in req.files) {
+                const file = req.files[fileType][0];
+                const filePath = path.join(__dirname, '../public/uploads/company', file.filename);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+        }
+
         res.status(500).json({ 
             success: false,
             message: 'Error updating company settings',
@@ -92,7 +142,6 @@ const updateCompanySettings = async (req, res) => {
         });
     }
 };
-
 module.exports = {
     getCompanySettings,
     updateCompanySettings
