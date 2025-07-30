@@ -112,10 +112,10 @@ router.delete('/signatures/:signatureId', protect, SignatureController.deleteSig
 router.patch('/signatures/set-default/:signatureId', protect, SignatureController.setAsDefaultSignature);
 router.patch('/signatures/status/:signatureId', protect, SignatureController.updateSignatureStatus);
 //bankDetails
-router.post('/bank-details', protect, createBankDetailValidator, BankDetailController.createBankDetail);
-router.get('/bank-details', protect, BankDetailController.listBankDetails);
-router.put('/bank-details/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
-router.delete('/bank-details/:id', protect, BankDetailController.deleteBankDetail);
+router.post('/bank-accounts', protect, createBankDetailValidator, BankDetailController.createBankDetail);
+router.get('/bank-accounts', protect, BankDetailController.listBankDetails);
+router.put('/bank-accounts/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
+router.delete('/bank-accounts/:id', protect, BankDetailController.deleteBankDetail);
 //companySetting
 // Get company settings
 router.get('company/:userId', CompanySettings.getCompanySettings);
