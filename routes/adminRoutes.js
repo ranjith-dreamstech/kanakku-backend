@@ -24,7 +24,7 @@ const { updateProfileValidator } = require('../validators/updateProfileValidator
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
-const { createBankDetailValidator } = require('@validators/bankDetailValidator');
+const { createBankDetailValidator, updateBankDetailValidator } = require('@validators/bankDetailValidator');
 
 
 router.get('/', protect, adminController.dashboard);
@@ -112,5 +112,8 @@ router.patch('/signatures/set-default/:signatureId', protect, SignatureControlle
 router.patch('/signatures/status/:signatureId', protect, SignatureController.updateSignatureStatus);
 //bankDetails
 router.post('/bank-details', protect, createBankDetailValidator, BankDetailController.createBankDetail);
+router.get('/bank-details', protect, BankDetailController.listBankDetails);
+router.put('/bank-details/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
+router.delete('/bank-details/:id', protect, BankDetailController.deleteBankDetail);
 
 module.exports = router;

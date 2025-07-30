@@ -37,11 +37,28 @@ const bankDetailSchema = new mongoose.Schema({
         required: true
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    toJSON: {
+        virtuals: true,
+        transform: function(doc, ret) {
+            delete ret.__v;
+            delete ret.isDeleted;
+            return ret;
+        }
+    },
+    toObject: {
+        virtuals: true,
+        transform: function(doc, ret) {
+            delete ret.__v;
+            delete ret.isDeleted;
+            return ret;
+        }
+    }
 });
 
-// Add index for frequently queried fields
+// Indexes
 bankDetailSchema.index({ userId: 1 });
 bankDetailSchema.index({ accountNumber: 1 }, { unique: true });
+bankDetailSchema.index({ isDeleted: 1 });
 
 module.exports = mongoose.model('BankDetail', bankDetailSchema);
