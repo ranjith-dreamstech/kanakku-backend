@@ -127,11 +127,13 @@ const getBankDetail = async (req, res) => {
 // List all bank details (with pagination)
 const listBankDetails = async (req, res) => {
     try {
-        const { page = 1, limit = 10, userId, status } = req.query;
+        const { page = 1, limit = 10, userId, status, search = '' } = req.query;
         const skip = (page - 1) * limit;
 
-        const query = { isDeleted: false };
+        // Build base query
+        const baseQuery = { isDeleted: false };
         
+        // Add user filter if provided
         if (userId) {
             if (!mongoose.Types.ObjectId.isValid(userId)) {
                 return res.status(400).json({
@@ -139,29 +141,63 @@ const listBankDetails = async (req, res) => {
                     message: 'Invalid user ID format'
                 });
             }
-            query.userId = userId;
+            baseQuery.userId = userId;
         }
 
+        // Add status filter if provided
         if (status !== undefined) {
-            query.status = status === 'true';
+            baseQuery.status = status === 'true';
         }
 
+        // Build search query if search term exists
+        const searchQuery = search ? {
+            $or: [
+                { accountHoldername: { $regex: search, $options: 'i' } },
+                { bankName: { $regex: search, $options: 'i' } },
+                { branchName: { $regex: search, $options: 'i' } },
+                { accountNumber: { $regex: search, $options: 'i' } },
+                { IFSCCode: { $regex: search, $options: 'i' } }
+            ]
+        } : {};
+
+        // Combine all queries
+        const query = { ...baseQuery, ...searchQuery };
+
+        // Get total count and paginated results in parallel
         const [bankDetails, total] = await Promise.all([
             BankDetail.find(query)
+                .sort({ createdAt: -1 })
                 .skip(skip)
-                .limit(parseInt(limit))
-                .sort({ createdAt: -1 }),
+                .limit(Number(limit))
+                .lean(), // Convert to plain JS objects
             BankDetail.countDocuments(query)
         ]);
 
+        // Transform the data if needed (similar to suppliers transformation)
+        const transformedDetails = bankDetails.map(detail => ({
+            id: detail._id,
+            accountHoldername: detail.accountHoldername,
+            bankName: detail.bankName,
+            branchName: detail.branchName,
+            accountNumber: detail.accountNumber,
+            IFSCCode: detail.IFSCCode,
+            status: detail.status,
+            userId: detail.userId,
+            createdAt: detail.createdAt,
+            updatedAt: detail.updatedAt
+        }));
+
         res.status(200).json({
             success: true,
-            data: bankDetails,
-            pagination: {
-                total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                pages: Math.ceil(total / limit)
+            message: 'Bank details fetched successfully',
+            data: {
+                bankDetails: transformedDetails,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
             }
         });
     } catch (err) {

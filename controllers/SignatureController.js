@@ -284,7 +284,16 @@ const deleteSignature = async (req, res) => {
 const setAsDefaultSignature = async (req, res) => {
     try {
         const { signatureId } = req.params;
+        const { status } = req.body;
         const userId = req.user;
+
+        // Validate status is provided and is boolean
+        if (typeof status !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'Status must be a boolean value'
+            });
+        }
 
         // Find the signature
         const signature = await Signature.findOne({
@@ -300,29 +309,39 @@ const setAsDefaultSignature = async (req, res) => {
             });
         }
 
-        if (signature.markAsDefault) {
-            return res.status(200).json({
-                success: true,
-                message: 'Signature is already set as default'
-            });
+        // If setting as default (status = true)
+        if (status) {
+            // Unset any existing default signatures
+            await Signature.updateMany(
+                { userId, markAsDefault: true, _id: { $ne: signatureId } },
+                { $set: { markAsDefault: false } }
+            );
+
+            // Update user's default signature reference
+            await User.findByIdAndUpdate(
+                userId,
+                { defaultSignature: signature._id }
+            );
+        } else {
+            // If unsetting as default (status = false)
+            // Clear user's default signature if this was the default
+            if (signature._id.equals(req.user.defaultSignature)) {
+                await User.findByIdAndUpdate(
+                    userId,
+                    { $unset: { defaultSignature: "" } }
+                );
+            }
         }
 
-        await Signature.updateMany(
-            { userId, markAsDefault: true, _id: { $ne: signatureId } },
-            { $set: { markAsDefault: false } }
-        );
-
-        signature.markAsDefault = true;
+        // Update the signature's status
+        signature.markAsDefault = status;
         await signature.save();
-
-        await User.findByIdAndUpdate(
-            userId,
-            { defaultSignature: signature._id }
-        );
 
         res.status(200).json({
             success: true,
-            message: 'Signature set as default successfully',
+            message: status 
+                ? 'Signature set as default successfully' 
+                : 'Signature removed as default successfully',
             data: {
                 id: signature._id,
                 signatureName: signature.signatureName,
@@ -331,8 +350,9 @@ const setAsDefaultSignature = async (req, res) => {
         });
     } catch (err) {
         console.error('Set default signature error:', err);
-           res.status(500).json({ 
-            message: 'Error creating supplier user',
+        res.status(500).json({ 
+            success: false,
+            message: 'Error updating signature status',
             error: err.message 
         });
     }

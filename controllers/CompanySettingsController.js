@@ -1,4 +1,5 @@
 const CompanySettings = require('@models/CompanySettings');
+const mongoose = require('mongoose');
 const User = require('@models/User');
 
 // Get company settings (single entry)

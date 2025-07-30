@@ -119,9 +119,9 @@ router.delete('/bank-accounts/:id', protect, BankDetailController.deleteBankDeta
 router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankDetailController.updateBankDetailStatus);
 //companySetting
 // Get company settings
-router.get('company/:userId', CompanySettings.getCompanySettings);
+router.get('/company-details/:userId', CompanySettings.getCompanySettings);
 
 // Update company settings (will create if doesn't exist)
-router.put('company/:userId', updateCompanySettingsValidator, CompanySettings.updateCompanySettings);
+router.put('/company-details/:userId', updateCompanySettingsValidator, CompanySettings.updateCompanySettings);
 
 module.exports = router;
