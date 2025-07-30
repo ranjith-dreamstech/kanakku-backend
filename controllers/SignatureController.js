@@ -3,7 +3,6 @@ const User = require('@models/User');
 const fs = require('fs');
 const path = require('path');
 
-// Create a new signature
 const createSignature = async (req, res) => {
     try {
         const { signatureName, markAsDefault = false } = req.body;
@@ -67,7 +66,6 @@ const createSignature = async (req, res) => {
     }
 };
 
-// Get all signatures for a user
 const getUserSignatures = async (req, res) => {
     try {
         const userId = req.user;
@@ -103,14 +101,12 @@ const getUserSignatures = async (req, res) => {
     }
 };
 
-// Update a signature
 const updateSignature = async (req, res) => {
     try {
         const { signatureId } = req.params;
         const { signatureName, markAsDefault, status } = req.body;
         const userId = req.user;
 
-        // Find the signature
         const signature = await Signature.findOne({
             _id: signatureId,
             userId,
@@ -124,7 +120,6 @@ const updateSignature = async (req, res) => {
             });
         }
 
-        // Update fields if provided
         if (signatureName) signature.signatureName = signatureName;
         if (typeof markAsDefault !== 'undefined') {
             signature.markAsDefault = markAsDefault;
@@ -133,9 +128,7 @@ const updateSignature = async (req, res) => {
             signature.status = status;
         }
 
-        // Handle image update if new file was uploaded
         if (req.file) {
-            // Delete old image file
             try {
                 if (fs.existsSync(signature.signatureImage)) {
                     fs.unlinkSync(signature.signatureImage);
@@ -149,7 +142,6 @@ const updateSignature = async (req, res) => {
 
         await signature.save();
 
-        // If this is set as default, update user's default signature reference
         if (signature.markAsDefault) {
             await User.findByIdAndUpdate(userId, {
                 defaultSignature: signature._id
@@ -169,7 +161,6 @@ const updateSignature = async (req, res) => {
             }
         });
     } catch (err) {
-        // Clean up uploaded file if error occurs
         if (req.file && req.file.path) {
             try {
                 fs.unlinkSync(req.file.path);
@@ -187,13 +178,11 @@ const updateSignature = async (req, res) => {
     }
 };
 
-// Soft delete a signature
 const deleteSignature = async (req, res) => {
     try {
         const { signatureId } = req.params;
         const userId = req.user;
 
-        // Find and soft delete the signature
         const signature = await Signature.findOneAndUpdate(
             { 
                 _id: signatureId, 
@@ -215,7 +204,6 @@ const deleteSignature = async (req, res) => {
             });
         }
 
-        // If this was the default signature, find a new one to set as default
         if (signature.markAsDefault) {
             const newDefault = await Signature.findOne({
                 userId,
@@ -231,7 +219,6 @@ const deleteSignature = async (req, res) => {
                     defaultSignature: newDefault._id
                 });
             } else {
-                // No other signatures, remove default reference
                 await User.findByIdAndUpdate(userId, {
                     $unset: { defaultSignature: 1 }
                 });

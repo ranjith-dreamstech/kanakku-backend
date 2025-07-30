@@ -18,7 +18,6 @@ exports.createSignatureValidator = [
         .withMessage("markAsDefault must be a boolean value"),
 
     (req, res, next) => {
-        // Check if file was uploaded
         if (!req.file) {
             return res.status(422).json({
                 message: 'Validation failed',
@@ -26,10 +25,8 @@ exports.createSignatureValidator = [
             });
         }
 
-        // Validate file type
         const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
         if (!allowedTypes.includes(req.file.mimetype)) {
-            // Delete the uploaded file
             fs.unlinkSync(req.file.path);
             return res.status(422).json({
                 message: 'Validation failed',
@@ -37,7 +34,6 @@ exports.createSignatureValidator = [
             });
         }
 
-        // Validate file size (max 2MB)
         if (req.file.size > 2 * 1024 * 1024) {
             fs.unlinkSync(req.file.path);
             return res.status(422).json({
@@ -48,7 +44,6 @@ exports.createSignatureValidator = [
 
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            // Clean up the uploaded file if there are other validation errors
             if (req.file && req.file.path) {
                 fs.unlinkSync(req.file.path);
             }

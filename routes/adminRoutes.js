@@ -102,16 +102,8 @@ router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType)
 router.get('/user/:id', protect, purchaseOrderController.getUserById);
 //signature
 router.post('/signatures', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.createSignature);
-// Get all signatures for the authenticated user
 router.get('/signatures', protect, SignatureController.getUserSignatures);
-
-router.put(
-    '/signatures/:signatureId', 
-    protect, 
-    upload.single('signatureImage'), 
-    createSignatureValidator, 
-    SignatureController.updateSignature
-);
-
+router.put('/signatures/:signatureId', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.updateSignature);
 router.delete('/signatures/:signatureId', protect, SignatureController.deleteSignature);
+
 module.exports = router;
