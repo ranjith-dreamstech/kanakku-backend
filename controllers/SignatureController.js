@@ -322,7 +322,6 @@ const setAsDefaultSignature = async (req, res) => {
             });
         }
 
-        // If already default, return success
         if (signature.markAsDefault) {
             return res.status(200).json({
                 success: true,
@@ -330,52 +329,33 @@ const setAsDefaultSignature = async (req, res) => {
             });
         }
 
-        // Transaction to ensure atomic update
-        const session = await mongoose.startSession();
-        session.startTransaction();
+        await Signature.updateMany(
+            { userId, markAsDefault: true, _id: { $ne: signatureId } },
+            { $set: { markAsDefault: false } }
+        );
 
-        try {
-            // Remove default from all other signatures
-            await Signature.updateMany(
-                { userId, markAsDefault: true },
-                { $set: { markAsDefault: false } },
-                { session }
-            );
+        signature.markAsDefault = true;
+        await signature.save();
 
-            // Set this signature as default
-            signature.markAsDefault = true;
-            await signature.save({ session });
+        await User.findByIdAndUpdate(
+            userId,
+            { defaultSignature: signature._id }
+        );
 
-            // Update user's default signature reference
-            await User.findByIdAndUpdate(
-                userId,
-                { defaultSignature: signature._id },
-                { session }
-            );
-
-            await session.commitTransaction();
-            
-            res.status(200).json({
-                success: true,
-                message: 'Signature set as default successfully',
-                data: {
-                    id: signature._id,
-                    signatureName: signature.signatureName,
-                    markAsDefault: signature.markAsDefault
-                }
-            });
-        } catch (transactionError) {
-            await session.abortTransaction();
-            throw transactionError;
-        } finally {
-            session.endSession();
-        }
+        res.status(200).json({
+            success: true,
+            message: 'Signature set as default successfully',
+            data: {
+                id: signature._id,
+                signatureName: signature.signatureName,
+                markAsDefault: signature.markAsDefault
+            }
+        });
     } catch (err) {
         console.error('Set default signature error:', err);
-        res.status(500).json({
-            success: false,
-            message: 'Error setting signature as default',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+           res.status(500).json({ 
+            message: 'Error creating supplier user',
+            error: err.message 
         });
     }
 };
