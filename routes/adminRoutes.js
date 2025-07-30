@@ -102,5 +102,18 @@ router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType)
 router.get('/user/:id', protect, purchaseOrderController.getUserById);
 //signature
 router.post('/signatures', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.createSignature);
+// Get all signatures for the authenticated user
+router.get('/signatures', protect, SignatureController.getUserSignatures);
 
+// Update a signature
+router.put(
+    '/signatures/:signatureId', 
+    protect, 
+    upload.single('signatureImage'), 
+    createSignatureValidator, 
+    SignatureController.updateSignature
+);
+
+// Delete a signature (soft delete)
+router.delete('/signatures/:signatureId', protect, SignatureController.deleteSignature);
 module.exports = router;
