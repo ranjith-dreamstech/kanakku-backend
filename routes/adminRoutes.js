@@ -9,6 +9,7 @@ const TaxGroupController = require('../controllers/TaxGroupController');
 const ProductController = require('../controllers/ProductController');
 const SupplierController = require('@controllers/Admin/Purchases/SupplierController');
 const purchaseOrderController = require('@controllers/Admin/Purchases/purchaseOrderController');
+const SignatureController = require('../controllers/SignatureController');
 const protect = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 const { uploadSingle, uploadMultiple, uploadProductFields } = require('../middleware/uploadProductImages');
@@ -21,6 +22,7 @@ const { createProductValidator, updateProductValidator } = require('../validator
 const { updateProfileValidator } = require('../validators/updateProfileValidator');
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
+const {createSignatureValidator} = require('../validators/signatureValidator');
 
 
 router.get('/', protect, adminController.dashboard);
@@ -98,5 +100,7 @@ router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
 router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType);
 router.get('/user/:id', protect, purchaseOrderController.getUserById);
+//signature
+router.post('/signatures', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.createSignature);
 
 module.exports = router;
