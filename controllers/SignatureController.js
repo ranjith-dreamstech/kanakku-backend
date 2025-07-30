@@ -73,26 +73,8 @@ const getUserSignatures = async (req, res) => {
             page = 1, 
             limit = 10, 
             search = '',
-            status,
-            sortBy = 'createdAt',
-            sortOrder = 'desc'
+            status
         } = req.query;
-
-        // Validate pagination parameters
-        const pageNumber = parseInt(page);
-        const limitNumber = parseInt(limit);
-        if (isNaN(pageNumber) || pageNumber < 1) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid page number'
-            });
-        }
-        if (isNaN(limitNumber) || limitNumber < 1 || limitNumber > 100) {
-            return res.status(400).json({
-                success: false,
-                message: 'Limit must be between 1 and 100'
-            });
-        }
 
         // Build query
         const query = { 
@@ -113,18 +95,14 @@ const getUserSignatures = async (req, res) => {
             query.status = status === 'true';
         }
 
-        // Build sort object
-        const sort = {};
-        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-        // Get total count for pagination info
+        // Get total count for pagination
         const total = await Signature.countDocuments(query);
 
         // Get paginated results
         const signatures = await Signature.find(query)
-            .sort(sort)
-            .skip((pageNumber - 1) * limitNumber)
-            .limit(limitNumber);
+            .sort({ createdAt: -1 }) // Standardized to newest first
+            .skip((page - 1) * limit)
+            .limit(Number(limit));
 
         const baseUrl = `${req.protocol}://${req.get('host')}/`;
         
@@ -141,15 +119,15 @@ const getUserSignatures = async (req, res) => {
         }));
 
         res.status(200).json({
-            success: true,
-            data: formattedSignatures,
-            pagination: {
-                total,
-                page: pageNumber,
-                limit: limitNumber,
-                totalPages: Math.ceil(total / limitNumber),
-                hasNextPage: pageNumber * limitNumber < total,
-                hasPreviousPage: pageNumber > 1
+            message: 'Signatures fetched successfully', // Standardized message format
+            data: {
+                signatures: formattedSignatures, // Changed from 'data' to 'signatures' to match pattern
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
             }
         });
     } catch (err) {

@@ -105,7 +105,7 @@ router.post('/signatures', protect, upload.single('signatureImage'), createSigna
 router.get('/signatures', protect, SignatureController.getUserSignatures);
 router.put('/signatures/:signatureId', protect, upload.single('signatureImage'), updateSignatureValidator, SignatureController.updateSignature);
 router.delete('/signatures/:signatureId', protect, SignatureController.deleteSignature);
-router.patch('/signatures/:signatureId/set-default', protect, SignatureController.setAsDefaultSignature);
-router.patch('/signatures/:signatureId/status', protect, SignatureController.updateSignatureStatus);
+router.patch('/signatures/set-default/:signatureId', protect, SignatureController.setAsDefaultSignature);
+router.patch('/signatures/status/:signatureId', protect, SignatureController.updateSignatureStatus);
 
 module.exports = router;
