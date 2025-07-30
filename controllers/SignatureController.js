@@ -114,34 +114,33 @@ const updateSignature = async (req, res) => {
         });
 
         if (!signature) {
+            if (req.file?.path) fs.unlinkSync(req.file.path);
             return res.status(404).json({
                 success: false,
-                message: 'Signature not found'
+                message: 'Signature not found or you dont have permission'
             });
         }
 
         if (signatureName) signature.signatureName = signatureName;
-        if (typeof markAsDefault !== 'undefined') {
-            signature.markAsDefault = markAsDefault;
-        }
-        if (typeof status !== 'undefined') {
-            signature.status = status;
-        }
+        if (typeof markAsDefault !== 'undefined') signature.markAsDefault = markAsDefault;
+        if (typeof status !== 'undefined') signature.status = status;
 
         if (req.file) {
             try {
-                if (fs.existsSync(signature.signatureImage)) {
+                if (signature.signatureImage && fs.existsSync(signature.signatureImage)) {
                     fs.unlinkSync(signature.signatureImage);
                 }
+                signature.signatureImage = req.file.path;
             } catch (fileErr) {
-                console.error('Error deleting old signature image:', fileErr);
+                console.error('Error handling signature image:', fileErr);
+                fs.unlinkSync(req.file.path);
+                throw new Error('Error updating signature image');
             }
-            
-            signature.signatureImage = req.file.path;
         }
 
         await signature.save();
 
+        // Update default signature reference if needed
         if (signature.markAsDefault) {
             await User.findByIdAndUpdate(userId, {
                 defaultSignature: signature._id
@@ -154,14 +153,18 @@ const updateSignature = async (req, res) => {
             data: {
                 id: signature._id,
                 signatureName: signature.signatureName,
-                signatureImage: `${req.protocol}://${req.get('host')}/${signature.signatureImage.replace(/\\/g, '/')}`,
+                signatureImage: signature.signatureImage 
+                    ? `${req.protocol}://${req.get('host')}/${signature.signatureImage.replace(/\\/g, '/')}`
+                    : undefined,
                 status: signature.status,
                 markAsDefault: signature.markAsDefault,
                 updatedAt: signature.updatedAt
             }
         });
+
     } catch (err) {
-        if (req.file && req.file.path) {
+        // Clean up uploaded file if error occurs
+        if (req.file?.path) {
             try {
                 fs.unlinkSync(req.file.path);
             } catch (fileErr) {
@@ -173,7 +176,7 @@ const updateSignature = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error updating signature',
-            error: err.message
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
         });
     }
 };

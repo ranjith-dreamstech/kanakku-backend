@@ -22,7 +22,7 @@ const { createProductValidator, updateProductValidator } = require('../validator
 const { updateProfileValidator } = require('../validators/updateProfileValidator');
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
-const {createSignatureValidator} = require('../validators/signatureValidator');
+const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
 
 
 router.get('/', protect, adminController.dashboard);
@@ -103,7 +103,7 @@ router.get('/user/:id', protect, purchaseOrderController.getUserById);
 //signature
 router.post('/signatures', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.createSignature);
 router.get('/signatures', protect, SignatureController.getUserSignatures);
-router.put('/signatures/:signatureId', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.updateSignature);
+router.put('/signatures/:signatureId', protect, upload.single('signatureImage'), updateSignatureValidator, SignatureController.updateSignature);
 router.delete('/signatures/:signatureId', protect, SignatureController.deleteSignature);
 
 module.exports = router;
