@@ -32,27 +32,67 @@ exports.getAllProducts = async (req, res) => {
     try {
         const { page = 1, limit = 10, search = '' } = req.query;
         
-        // Build search query
-        const searchQuery = {
-            $or: [
-                { product_name: { $regex: search, $options: 'i' } },
-                { product_code: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
-            ]
-        };
+        // Build the base query
+        const query = {};
+        
+        // Only add search conditions if search term exists
+        if (search && search.trim() !== '') {
+            const searchRegex = new RegExp(search.trim(), 'i');
+            
+            // Search in product fields
+            const productSearch = {
+                $or: [
+                    { name: searchRegex },
+                    { code: searchRegex },
+                    { description: searchRegex },
+                    { barcode: searchRegex }
+                ]
+            };
+            
+            // Search in populated brand and category names
+            const [matchingBrands, matchingCategories] = await Promise.all([
+                Brand.find({ brand_name: searchRegex }).select('_id'),
+                Category.find({ category_name: searchRegex }).select('_id')
+            ]);
+            
+            const brandIds = matchingBrands.map(b => b._id);
+            const categoryIds = matchingCategories.map(c => c._id);
+            
+            // Combine all search conditions
+            query.$or = [
+                productSearch,
+                brandIds.length ? { brand: { $in: brandIds } } : null,
+                categoryIds.length ? { category: { $in: categoryIds } } : null
+            ].filter(condition => condition !== null);
+        }
 
         // Get total count for pagination
-        const total = await Product.countDocuments(searchQuery);
+        const total = await Product.countDocuments(query);
 
         // Get paginated results with populated fields
-        const products = await Product.find(searchQuery)
-            .populate('category', 'category_name')
-            .populate('brand', 'brand_name')
+        const products = await Product.find(query)
+            .populate({
+                path: 'category',
+                select: 'category_name'
+            })
+            .populate({
+                path: 'brand',
+                select: 'brand_name'
+            })
+            .populate({
+                path: 'tax',
+                select: 'name total_tax_rate'
+            })
+            .populate({
+                path: 'unit',
+                select: 'name'
+            })
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(Number(limit));
 
         res.status(200).json({
+            success: true,
             message: 'Products fetched successfully',
             data: {
                 products,
@@ -65,9 +105,11 @@ exports.getAllProducts = async (req, res) => {
             }
         });
     } catch (error) {
+        console.error('Error fetching products:', error);
         res.status(500).json({ 
+            success: false,
             message: 'Server error', 
-            error: error.message 
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 };
