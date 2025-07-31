@@ -3,30 +3,32 @@ const TaxGroup = require('../models/TaxGroup');
 // Get all tax groups
 exports.getAllTaxGroups = async (req, res) => {
     try {
-        const { page = 1, limit = 10, search = '' } = req.query;
+        const { search, page = 1, limit = 10 } = req.query;
+        const skip = (page - 1) * limit;
         
-        // Build search query
-        const searchQuery = {
-            $or: [
-                { tax_group_name: { $regex: search, $options: 'i' } },
-                { tax_group_description: { $regex: search, $options: 'i' } }
-            ]
-        };
+        // Build the query
+        const query = {};
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
 
-        // Get total count for pagination
-        const total = await TaxGroup.countDocuments(searchQuery);
+        // Get total count for pagination info
+        const total = await TaxGroup.countDocuments(query);
 
-        // Get paginated results with populated tax rates
-        const taxGroups = await TaxGroup.find(searchQuery)
+        // Fetch tax groups with pagination and population
+        const taxGroups = await TaxGroup.find(query)
             .populate('tax_rate_ids')
             .sort({ createdAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(Number(limit));
+            .skip(skip)
+            .limit(parseInt(limit));
 
+        // Calculate total tax rates and format response
         const result = taxGroups.map(taxGroup => {
             const totalTaxRate = taxGroup.tax_rate_ids.reduce(
-                (sum, rate) => sum + (rate?.tax_rate || 0), 
-                0
+                (sum, rate) => sum + (rate.tax_rate || 0), 0
             );
 
             return {
@@ -36,24 +38,22 @@ exports.getAllTaxGroups = async (req, res) => {
         });
 
         res.status(200).json({
-            message: 'Tax groups fetched successfully',
-            data: {
-                taxGroups: result,
-                pagination: {
-                    total,
-                    page: Number(page),
-                    limit: Number(limit),
-                    totalPages: Math.ceil(total / limit)
-                }
+            data: result,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / limit)
             }
         });
     } catch (err) {
         res.status(500).json({ 
-            message: 'Failed to fetch tax groups',
+            message: 'Failed to fetch tax groups', 
             error: err.message 
         });
     }
 };
+
 // Create new tax group
 exports.createTaxGroup = async (req, res) => {
     try {
