@@ -13,8 +13,18 @@ exports.dashboard = async (req, res) => {
 
 exports.getCountries = async (req, res) => {
   try {
-    const countries = await Country.find({}, { _id: 1, name: 1 }).lean();
-    res.json(countries);
+    const { search } = req.query;
+    const query = {};
+    const projection = { _id: 1, name: 1 };
+    
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+      const countries = await Country.find(query, projection).lean();
+      res.json(countries);
+    } else {
+      const countries = await Country.find(query, projection).limit(10).lean();
+      res.json(countries);
+    }
   } catch (err) {
     res.status(500).json({ message: 'Error fetching countries', error: err.message });
   }
@@ -23,8 +33,18 @@ exports.getCountries = async (req, res) => {
 exports.getStates = async (req, res) => {
   const countryId = parseInt(req.params.countryId);
   try {
-    const states = await State.find({ country_id: countryId }, { _id: 1, name: 1 }).lean();
-    res.json(states);
+    const { search } = req.query;
+    const query = { country_id: countryId };
+    const projection = { _id: 1, name: 1 };
+    
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+      const states = await State.find(query, projection).lean();
+      res.json(states);
+    } else {
+      const states = await State.find(query, projection).limit(10).lean();
+      res.json(states);
+    }
   } catch (err) {
     res.status(500).json({ message: 'Error fetching states', error: err.message });
   }
@@ -33,8 +53,18 @@ exports.getStates = async (req, res) => {
 exports.getCities = async (req, res) => {
   const stateId = parseInt(req.params.stateId);
   try {
-    const cities = await City.find({ state_id: stateId }, { _id: 1, name: 1 }).lean();
-    res.json(cities);
+    const { search } = req.query;
+    const query = { state_id: stateId };
+    const projection = { _id: 1, name: 1 };
+    
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+      const cities = await City.find(query, projection).lean();
+      res.json(cities);
+    } else {
+      const cities = await City.find(query, projection).limit(10).lean();
+      res.json(cities);
+    }
   } catch (err) {
     res.status(500).json({ message: 'Error fetching cities', error: err.message });
   }
