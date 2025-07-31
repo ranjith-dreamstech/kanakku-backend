@@ -24,7 +24,7 @@ const { createTaxGroupValidator, updateTaxGroupValidator } = require('../validat
 const { createProductValidator, updateProductValidator } = require('../validators/productValidator');
 const { updateProfileValidator } = require('../validators/updateProfileValidator');
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
-const purchaseOrderValidator = require('../validators/Admin/Purchases/purchaseOrderValidator');
+const { purchaseOrderValidator, updatePurchaseOrderValidator } = require('../validators/Admin/Purchases/purchaseOrderValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
 const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
@@ -103,6 +103,12 @@ router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 
 //purchaseOrder
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
+router.get('/purchase-orders', protect, purchaseOrderController.listPurchaseOrders);
+router.get('/purchase-orders/:id', protect, purchaseOrderController.getPurchaseOrderById);
+router.put('/purchase-orders/:id', protect, upload.single('signatureImage'), updatePurchaseOrderValidator, purchaseOrderController.updatePurchaseOrder);
+router.delete('/purchase-orders/:id', protect, purchaseOrderController.deletePurchaseOrder);
+
+// Helper routes for purchase order creation
 router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType);
 router.get('/user/:id', protect, purchaseOrderController.getUserById);
 router.get('/productsrecent', protect, purchaseOrderController.getRecentProductsWithSearch);

@@ -58,4 +58,80 @@ const purchaseOrderValidator = [
   body('convert_type').optional().isIn(['purchase', 'estimate', 'invoice'])
 ];
 
-module.exports = purchaseOrderValidator;
+// Update validator - makes most fields optional
+const updatePurchaseOrderValidator = [
+  body('vendorId')
+    .optional()
+    .isMongoId().withMessage('Invalid Vendor ID format'),
+  
+  body('dueDate')
+    .optional()
+    .isISO8601().withMessage('Invalid date format')
+    .toDate(),
+  
+  body('items')
+    .optional()
+    .isArray({ min: 1 }).withMessage('At least one item is required'),
+  
+  body('items.*.name')
+    .optional()
+    .isString().withMessage('Item name must be a string'),
+  
+  body('items.*.productId')
+    .optional()
+    .isMongoId().withMessage('Invalid Product ID format'),
+  
+  body('items.*.quantity')
+    .optional()
+    .isNumeric().withMessage('Quantity must be a number')
+    .toFloat(),
+  
+  body('items.*.rate')
+    .optional()
+    .isNumeric().withMessage('Rate must be a number')
+    .toFloat(),
+  
+  body('items.*.discount')
+    .optional()
+    .isNumeric().withMessage('Discount must be a number')
+    .toFloat(),
+  
+  body('items.*.tax')
+    .optional()
+    .isNumeric().withMessage('Tax must be a number')
+    .toFloat(),
+  
+  body('paymentMode')
+    .optional()
+    .isIn(['CASH', 'CREDIT', 'CHECK', 'BANK_TRANSFER', 'OTHER'])
+    .withMessage('Invalid payment mode'),
+  
+  body('status')
+    .optional()
+    .isIn(['NEW', 'PENDING', 'COMPLETED', 'CANCELLED'])
+    .withMessage('Invalid status'),
+  
+  body('billFrom')
+    .optional()
+    .isMongoId().withMessage('Invalid Bill from user ID format'),
+  
+  body('billTo')
+    .optional()
+    .isMongoId().withMessage('Invalid Bill to user ID format'),
+  
+  // Optional fields
+  body('referenceNo').optional().isString(),
+  body('notes').optional().isString(),
+  body('termsAndCondition').optional().isString(),
+  body('sign_type').optional().isIn(['manualSignature', 'digitalSignature', 'none']),
+  body('signatureId').optional().isMongoId(),
+  body('bank').optional().isMongoId(),
+  body('convert_type').optional().isIn(['purchase', 'estimate', 'invoice']),
+  body('roundOff').optional().isBoolean(),
+  body('taxableAmount').optional().isNumeric(),
+  body('totalDiscount').optional().isNumeric(),
+  body('vat').optional().isNumeric(),
+  body('TotalAmount').optional().isNumeric()
+];
+
+module.exports = { purchaseOrderValidator, updatePurchaseOrderValidator };

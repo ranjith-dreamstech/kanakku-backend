@@ -443,6 +443,428 @@ const getUserSignatures = async (req, res) => {
     }
 };
 
+// List all purchase orders
+const listPurchaseOrders = async (req, res) => {
+    try {
+        const { 
+            page = 1, 
+            limit = 10, 
+            status, 
+            search = '',
+            vendorId,
+            startDate,
+            endDate
+        } = req.query;
+
+        const userId = req.user;
+        const skip = (page - 1) * limit;
+
+        // Build query
+        const query = { 
+            userId, 
+            isDeleted: false 
+        };
+
+        // Add status filter
+        if (status && ['NEW', 'PENDING', 'COMPLETED', 'CANCELLED'].includes(status)) {
+            query.status = status;
+        }
+
+        // Add vendor filter
+        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
+            query.vendorId = vendorId;
+        }
+
+        // Add date range filter
+        if (startDate || endDate) {
+            query.purchaseOrderDate = {};
+            if (startDate) {
+                query.purchaseOrderDate.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                query.purchaseOrderDate.$lte = new Date(endDate);
+            }
+        }
+
+        // Add search filter
+        if (search) {
+            query.$or = [
+                { purchaseOrderId: { $regex: search, $options: 'i' } },
+                { referenceNo: { $regex: search, $options: 'i' } },
+                { notes: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Get total count
+        const totalCount = await PurchaseOrder.countDocuments(query);
+
+        // Get purchase orders with pagination
+        const purchaseOrders = await PurchaseOrder.find(query)
+            .populate('vendorId', 'firstName lastName email phone')
+            .populate('signatureId', 'signatureName')
+            .populate('bank', 'bankName accountNumber')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        // Format response
+        const formattedOrders = purchaseOrders.map(order => ({
+            id: order._id,
+            purchaseOrderId: order.purchaseOrderId,
+            vendor: order.vendorId ? {
+                id: order.vendorId._id,
+                name: `${order.vendorId.firstName} ${order.vendorId.lastName}`,
+                email: order.vendorId.email,
+                phone: order.vendorId.phone
+            } : null,
+            purchaseOrderDate: order.purchaseOrderDate,
+            dueDate: order.dueDate,
+            referenceNo: order.referenceNo,
+            status: order.status,
+            paymentMode: order.paymentMode,
+            taxableAmount: order.taxableAmount,
+            totalDiscount: order.totalDiscount,
+            vat: order.vat,
+            TotalAmount: order.TotalAmount,
+            itemsCount: order.items.length,
+            billFrom: order.billFrom,
+            billTo: order.billTo,
+            notes: order.notes,
+            signature: order.signatureId ? {
+                id: order.signatureId._id,
+                name: order.signatureId.signatureName
+            } : null,
+            bank: order.bank ? {
+                id: order.bank._id,
+                name: order.bank.bankName,
+                accountNumber: order.bank.accountNumber
+            } : null,
+            convert_type: order.convert_type,
+            createdAt: order.createdAt,
+            updatedAt: order.updatedAt
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase orders retrieved successfully',
+            data: formattedOrders,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(totalCount / limit),
+                totalCount,
+                hasNextPage: page * limit < totalCount,
+                hasPrevPage: page > 1
+            }
+        });
+
+    } catch (err) {
+        console.error('List purchase orders error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching purchase orders',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
+// Get purchase order by ID
+const getPurchaseOrderById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid purchase order ID format'
+            });
+        }
+
+        const purchaseOrder = await PurchaseOrder.findOne({ 
+            _id: id, 
+            userId, 
+            isDeleted: false 
+        })
+        .populate('vendorId', 'firstName lastName email phone address')
+        .populate('signatureId', 'signatureName signatureImage')
+        .populate('bank', 'bankName accountNumber IFSCCode')
+        .populate('items.productId', 'product_name product_code price stock image_url')
+        .populate('items.unit', 'unit_name');
+
+        if (!purchaseOrder) {
+            return res.status(404).json({
+                success: false,
+                message: 'Purchase order not found'
+            });
+        }
+
+        // Format items
+        const formattedItems = purchaseOrder.items.map(item => ({
+            id: item._id,
+            name: item.name,
+            key: item.key,
+            product: item.productId ? {
+                id: item.productId._id,
+                name: item.productId.product_name,
+                code: item.productId.product_code,
+                price: item.productId.price,
+                stock: item.productId.stock,
+                image: item.productId.image_url
+            } : null,
+            quantity: item.quantity,
+            units: item.units,
+            unit: item.unit ? {
+                id: item.unit._id,
+                name: item.unit.unit_name
+            } : null,
+            rate: item.rate,
+            discount: item.discount,
+            tax: item.tax,
+            taxInfo: item.taxInfo,
+            amount: item.amount,
+            discountType: item.discountType
+        }));
+
+        // Format signature image URL
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+        const signatureImage = purchaseOrder.signatureId?.signatureImage 
+            ? `${baseUrl}${purchaseOrder.signatureId.signatureImage.replace(/\\/g, '/')}`
+            : null;
+
+        const responseData = {
+            id: purchaseOrder._id,
+            purchaseOrderId: purchaseOrder.purchaseOrderId,
+            vendor: purchaseOrder.vendorId ? {
+                id: purchaseOrder.vendorId._id,
+                name: `${purchaseOrder.vendorId.firstName} ${purchaseOrder.vendorId.lastName}`,
+                email: purchaseOrder.vendorId.email,
+                phone: purchaseOrder.vendorId.phone,
+                address: purchaseOrder.vendorId.address
+            } : null,
+            purchaseOrderDate: purchaseOrder.purchaseOrderDate,
+            dueDate: purchaseOrder.dueDate,
+            referenceNo: purchaseOrder.referenceNo,
+            status: purchaseOrder.status,
+            paymentMode: purchaseOrder.paymentMode,
+            taxableAmount: purchaseOrder.taxableAmount,
+            totalDiscount: purchaseOrder.totalDiscount,
+            vat: purchaseOrder.vat,
+            roundOff: purchaseOrder.roundOff,
+            TotalAmount: purchaseOrder.TotalAmount,
+            items: formattedItems,
+            billFrom: purchaseOrder.billFrom,
+            billTo: purchaseOrder.billTo,
+            notes: purchaseOrder.notes,
+            termsAndCondition: purchaseOrder.termsAndCondition,
+            sign_type: purchaseOrder.sign_type,
+            signature: purchaseOrder.signatureId ? {
+                id: purchaseOrder.signatureId._id,
+                name: purchaseOrder.signatureId.signatureName,
+                image: signatureImage
+            } : null,
+            bank: purchaseOrder.bank ? {
+                id: purchaseOrder.bank._id,
+                name: purchaseOrder.bank.bankName,
+                accountNumber: purchaseOrder.bank.accountNumber,
+                IFSCCode: purchaseOrder.bank.IFSCCode
+            } : null,
+            convert_type: purchaseOrder.convert_type,
+            createdAt: purchaseOrder.createdAt,
+            updatedAt: purchaseOrder.updatedAt
+        };
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase order retrieved successfully',
+            data: responseData
+        });
+
+    } catch (err) {
+        console.error('Get purchase order error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching purchase order',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
+// Update purchase order
+const updatePurchaseOrder = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user;
+        const updates = req.body;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid purchase order ID format'
+            });
+        }
+
+        // Check if purchase order exists and belongs to user
+        const existingOrder = await PurchaseOrder.findOne({ 
+            _id: id, 
+            userId, 
+            isDeleted: false 
+        });
+
+        if (!existingOrder) {
+            return res.status(404).json({
+                success: false,
+                message: 'Purchase order not found'
+            });
+        }
+
+        // Validate vendor if provided
+        if (updates.vendorId) {
+            const vendor = await User.findById(updates.vendorId);
+            if (!vendor || vendor.user_type !== 2) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid vendor ID or vendor is not a supplier'
+                });
+            }
+        }
+
+        // Validate products in items if provided
+        if (updates.items && Array.isArray(updates.items)) {
+            for (const item of updates.items) {
+                if (item.productId) {
+                    const product = await Product.findById(item.productId);
+                    if (!product) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Invalid product ID: ${item.productId}`
+                        });
+                    }
+                }
+            }
+        }
+
+        // Calculate amounts if items are updated
+        if (updates.items && Array.isArray(updates.items)) {
+            let taxableAmount = 0;
+            let totalDiscount = 0;
+            let vat = 0;
+            let totalAmount = 0;
+
+            updates.items.forEach(item => {
+                const itemAmount = item.quantity * (item.rate || 0);
+                const itemDiscount = item.discount || 0;
+                const itemTax = item.tax || 0;
+                
+                taxableAmount += itemAmount;
+                totalDiscount += itemDiscount;
+                vat += itemTax;
+                totalAmount += (itemAmount - itemDiscount + itemTax);
+            });
+
+            updates.taxableAmount = taxableAmount;
+            updates.totalDiscount = totalDiscount;
+            updates.vat = vat;
+            updates.TotalAmount = totalAmount;
+        }
+
+        // Handle signature image upload
+        if (req.file) {
+            updates.signatureImage = req.file.path;
+        }
+
+        // Remove protected fields
+        const protectedFields = ['_id', 'purchaseOrderId', 'userId', 'createdAt', 'updatedAt'];
+        protectedFields.forEach(field => delete updates[field]);
+
+        // Update purchase order
+        const updatedOrder = await PurchaseOrder.findByIdAndUpdate(
+            id,
+            { $set: updates },
+            { 
+                new: true,
+                runValidators: true
+            }
+        )
+        .populate('vendorId', 'firstName lastName email phone')
+        .populate('signatureId', 'signatureName')
+        .populate('bank', 'bankName accountNumber');
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase order updated successfully',
+            data: {
+                id: updatedOrder._id,
+                purchaseOrderId: updatedOrder.purchaseOrderId,
+                vendor: updatedOrder.vendorId ? {
+                    id: updatedOrder.vendorId._id,
+                    name: `${updatedOrder.vendorId.firstName} ${updatedOrder.vendorId.lastName}`
+                } : null,
+                status: updatedOrder.status,
+                TotalAmount: updatedOrder.TotalAmount,
+                updatedAt: updatedOrder.updatedAt
+            }
+        });
+
+    } catch (err) {
+        console.error('Update purchase order error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating purchase order',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
+// Delete purchase order (soft delete)
+const deletePurchaseOrder = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid purchase order ID format'
+            });
+        }
+
+        // Check if purchase order exists and belongs to user
+        const purchaseOrder = await PurchaseOrder.findOne({ 
+            _id: id, 
+            userId, 
+            isDeleted: false 
+        });
+
+        if (!purchaseOrder) {
+            return res.status(404).json({
+                success: false,
+                message: 'Purchase order not found'
+            });
+        }
+
+        // Soft delete the purchase order
+        await PurchaseOrder.findByIdAndUpdate(id, { 
+            isDeleted: true 
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase order deleted successfully',
+            data: {
+                id: purchaseOrder._id,
+                purchaseOrderId: purchaseOrder.purchaseOrderId
+            }
+        });
+
+    } catch (err) {
+        console.error('Delete purchase order error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting purchase order',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
 
 module.exports = {
     createPurchaseOrder,
@@ -450,5 +872,9 @@ module.exports = {
     getUserById,
     getRecentProductsWithSearch,
     listBankDetails,
-    getUserSignatures
+    getUserSignatures,
+    listPurchaseOrders,
+    getPurchaseOrderById,
+    updatePurchaseOrder,
+    deletePurchaseOrder
 };
