@@ -10,7 +10,7 @@ exports.getAllTaxGroups = async (req, res) => {
         const query = {};
         if (search) {
             query.$or = [
-                { name: { $regex: search, $options: 'i' } },
+                { tax_name: { $regex: search, $options: 'i' } },
                 { description: { $regex: search, $options: 'i' } }
             ];
         }
