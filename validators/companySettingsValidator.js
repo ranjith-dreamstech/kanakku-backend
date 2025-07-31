@@ -1,6 +1,4 @@
 const { body, validationResult } = require("express-validator");
-const mongoose = require('mongoose');
-const User = require("@models/User");
 
 const validate = (req, res, next) => {
     const errors = validationResult(req);
@@ -21,7 +19,6 @@ const validate = (req, res, next) => {
 
 exports.updateCompanySettingsValidator = [
     body("companyName")
-        .optional()
         .trim()
         .notEmpty()
         .withMessage("Company name is required")
@@ -29,7 +26,6 @@ exports.updateCompanySettingsValidator = [
         .withMessage("Company name cannot exceed 100 characters"),
 
     body("email")
-        .optional()
         .trim()
         .notEmpty()
         .withMessage("Email is required")
@@ -37,36 +33,30 @@ exports.updateCompanySettingsValidator = [
         .withMessage("Invalid email address"),
 
     body("phone")
-        .optional()
         .trim()
         .notEmpty()
         .withMessage("Phone number is required")
         .isMobilePhone()
         .withMessage("Invalid phone number"),
 
-    body("addressLine1")
-        .optional()
+    body("address")
         .trim()
         .notEmpty()
-        .withMessage("Address line 1 is required"),
+        .withMessage("Address is required"),
 
     body("city")
-        .optional()
         .notEmpty()
         .withMessage("City is required"),
 
     body("state")
-        .optional()
         .notEmpty()
         .withMessage("State is required"),
 
     body("country")
-        .optional()
         .notEmpty()
         .withMessage("Country is required"),
 
     body("pincode")
-        .optional()
         .trim()
         .notEmpty()
         .withMessage("Pincode is required"),

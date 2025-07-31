@@ -130,11 +130,12 @@ router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankD
 
 router.put(
   '/company-details/:userId',
+  protect,
   uploadCompanyFields,
   handleUploadError,
   updateCompanySettingsValidator,
   CompanySettings.updateCompanySettings
 );
-router.get('/company-details/:userId', CompanySettings.getCompanySettings);
+router.get('/company-details/:userId', protect, CompanySettings.getCompanySettings);
 
 module.exports = router;

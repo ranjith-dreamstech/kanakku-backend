@@ -27,12 +27,11 @@ const getCompanySettings = async (req, res) => {
 
         const settingsData = settings.toObject();
         
-        const imageFields = ['siteLogo', 'favicon', 'companyLogo'];
+        const imageFields = ['siteLogo', 'favicon', 'companyLogo', 'companyBanner'];
         const baseUrl = `${req.protocol}://${req.get('host')}`;
         
         imageFields.forEach(field => {
             if (settingsData[field]) {
-                // Remove any leading slashes or backslashes before joining with base URL
                 const cleanedPath = settingsData[field].replace(/^[\\/]+/, '');
                 settingsData[field] = `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
             }
@@ -52,21 +51,19 @@ const getCompanySettings = async (req, res) => {
     }
 };
 
-// Helper function to delete old files
 const deleteOldFile = async (filePath) => {
-  if (filePath) {
-    try {
-      const fullPath = path.join(__dirname, '..', filePath);
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-      }
-    } catch (err) {
-      console.error('Error deleting old file:', err);
+    if (filePath) {
+        try {
+            const fullPath = path.join(__dirname, '..', filePath);
+            if (fs.existsSync(fullPath)) {
+                fs.unlinkSync(fullPath);
+            }
+        } catch (err) {
+            console.error('Error deleting old file:', err);
+        }
     }
-  }
 };
 
-// Update company settings (with file handling)
 const updateCompanySettings = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -79,7 +76,6 @@ const updateCompanySettings = async (req, res) => {
             });
         }
 
-        // Check if user exists
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({
@@ -88,41 +84,27 @@ const updateCompanySettings = async (req, res) => {
             });
         }
 
-        // Get current settings
         const currentSettings = await CompanySettings.findOne({ userId }) || {};
 
-        // Process uploaded files
         if (req.files) {
-            // Handle site logo
-            if (req.files.siteLogo && req.files.siteLogo[0]) {
-                await deleteOldFile(currentSettings.siteLogo);
-                updates.siteLogo = `/uploads/company/${req.files.siteLogo[0].filename}`;
-            }
+            const fileFields = {
+                siteLogo: 'siteLogo',
+                favicon: 'favicon',
+                companyLogo: 'companyLogo',
+                companyBanner: 'companyBanner'
+            };
 
-            // Handle favicon
-            if (req.files.favicon && req.files.favicon[0]) {
-                await deleteOldFile(currentSettings.favicon);
-                updates.favicon = `/uploads/company/${req.files.favicon[0].filename}`;
-            }
-
-            // Handle company logo
-            if (req.files.companyLogo && req.files.companyLogo[0]) {
-                await deleteOldFile(currentSettings.companyLogo);
-                updates.companyLogo = `/uploads/company/${req.files.companyLogo[0].filename}`;
-            }
-
-            // Handle company banner
-            if (req.files.companyBanner && req.files.companyBanner[0]) {
-                await deleteOldFile(currentSettings.companyBanner);
-                updates.companyBanner = `/uploads/company/${req.files.companyBanner[0].filename}`;
+            for (const [field, fieldName] of Object.entries(fileFields)) {
+                if (req.files[field] && req.files[field][0]) {
+                    await deleteOldFile(currentSettings[field]);
+                    updates[field] = `/uploads/company/${req.files[field][0].filename}`;
+                }
             }
         }
 
-        // Remove protected fields
         const protectedFields = ['_id', 'userId', 'createdAt', 'updatedAt'];
         protectedFields.forEach(field => delete updates[field]);
 
-        // Update or create settings
         const settings = await CompanySettings.findOneAndUpdate(
             { userId },
             { $set: updates },
@@ -134,7 +116,6 @@ const updateCompanySettings = async (req, res) => {
             }
         );
 
-        // Format response with full URLs for images
         const settingsData = settings.toObject();
         const imageFields = ['siteLogo', 'favicon', 'companyLogo', 'companyBanner'];
         const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -155,7 +136,6 @@ const updateCompanySettings = async (req, res) => {
     } catch (err) {
         console.error('Update company settings error:', err);
         
-        // Clean up uploaded files if error occurred
         if (req.files) {
             for (const fileType in req.files) {
                 if (req.files[fileType] && req.files[fileType][0]) {
@@ -175,6 +155,7 @@ const updateCompanySettings = async (req, res) => {
         });
     }
 };
+
 module.exports = {
     getCompanySettings,
     updateCompanySettings

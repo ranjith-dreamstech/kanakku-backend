@@ -17,13 +17,9 @@ const companySettingsSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
-    addressLine1: {
+    address: {
         type: String,
         required: true,
-        trim: true
-    },
-    addressLine2: {
-        type: String,
         trim: true
     },
     city: {
@@ -52,6 +48,10 @@ const companySettingsSchema = new mongoose.Schema({
         default: ""
     },
     companyLogo: {
+        type: String,
+        default: ""
+    },
+    companyBanner: {
         type: String,
         default: ""
     },
