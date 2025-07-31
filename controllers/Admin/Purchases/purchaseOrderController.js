@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const PurchaseOrder = require('@models/PurchaseOrder');
 const User = require('@models/User');
 const Product = require('@models/Product');
+const BankDetail = require('@models/BankDetail');
+const Signature = require('@models/Signature');
 
 // Create a new purchase order
 const createPurchaseOrder = async (req, res) => {
@@ -303,10 +305,150 @@ const getRecentProductsWithSearch = async (req, res) => {
     }
 };
 
+const listBankDetails = async (req, res) => {
+    try {
+        const { userId, status, search = '' } = req.query;
+
+        const baseQuery = { isDeleted: false };
+        
+        if (userId) {
+            if (!mongoose.Types.ObjectId.isValid(userId)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid user ID format'
+                });
+            }
+            baseQuery.userId = userId;
+        }
+
+        // Add status filter if provided
+        if (status !== undefined) {
+            baseQuery.status = status === 'true';
+        }
+
+        // Build search query if search term exists
+        const searchQuery = search ? {
+            $or: [
+                { accountHoldername: { $regex: search, $options: 'i' } },
+                { bankName: { $regex: search, $options: 'i' } },
+                { branchName: { $regex: search, $options: 'i' } },
+                { accountNumber: { $regex: search, $options: 'i' } },
+                { IFSCCode: { $regex: search, $options: 'i' } }
+            ]
+        } : {};
+
+        // Combine all queries
+        const query = { ...baseQuery, ...searchQuery };
+
+        // Get bank details - if search is empty, get last 10, otherwise get all matching
+        const bankDetails = await BankDetail.find(query)
+            .sort({ createdAt: -1 })
+            .limit(search ? 0 : 10) // No limit when searching
+            .lean();
+
+        // Transform the data
+        const transformedDetails = bankDetails.map(detail => ({
+            id: detail._id,
+            accountHoldername: detail.accountHoldername,
+            bankName: detail.bankName,
+            branchName: detail.branchName,
+            accountNumber: detail.accountNumber,
+            IFSCCode: detail.IFSCCode,
+            status: detail.status,
+            userId: detail.userId,
+            createdAt: detail.createdAt,
+            updatedAt: detail.updatedAt
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: search 
+                ? 'Search results for bank details' 
+                : 'Last 10 bank details retrieved',
+            data: transformedDetails,
+            count: transformedDetails.length
+        });
+    } catch (err) {
+        console.error('List bank details error:', err);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error fetching bank details',
+            error: err.message 
+        });
+    }
+};
+
+const getUserSignatures = async (req, res) => {
+    try {
+        const userId = req.user;
+        const { 
+            search = '',
+            status
+        } = req.query;
+
+        // Build base query
+        const query = { 
+            userId, 
+            isDeleted: false 
+        };
+
+        // Add search filter if search term exists
+        if (search) {
+            query.signatureName = { 
+                $regex: search, 
+                $options: 'i' 
+            };
+        }
+
+        // Add status filter if provided
+        if (status !== undefined) {
+            query.status = status === 'true';
+        }
+
+        // Get signatures - if search is empty, get last 10, otherwise get all matching
+        const signatures = await Signature.find(query)
+            .sort({ createdAt: -1 })
+            .limit(search ? 0 : 10); // No limit when searching
+
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+        
+        // Format response
+        const formattedSignatures = signatures.map(sig => ({
+            id: sig._id,
+            signatureName: sig.signatureName,
+            signatureImage: sig.signatureImage 
+                ? `${baseUrl}${sig.signatureImage.replace(/\\/g, '/')}`
+                : null,
+            status: sig.status,
+            markAsDefault: sig.markAsDefault,
+            createdAt: sig.createdAt,
+            updatedAt: sig.updatedAt
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: search 
+                ? 'Search results for signatures' 
+                : 'Last 10 signatures retrieved',
+            data: formattedSignatures,
+            count: formattedSignatures.length
+        });
+    } catch (err) {
+        console.error('Error fetching signatures:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching signatures',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
 
 module.exports = {
     createPurchaseOrder,
     listUsersByType,
     getUserById,
-    getRecentProductsWithSearch
+    getRecentProductsWithSearch,
+    listBankDetails,
+    getUserSignatures
 };

@@ -104,6 +104,8 @@ router.post('/purchase-order', protect, upload.single('signatureImage'), purchas
 router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType);
 router.get('/user/:id', protect, purchaseOrderController.getUserById);
 router.get('/productsrecent', protect, purchaseOrderController.getRecentProductsWithSearch);
+router.get('/bankdetailsrecent', protect, purchaseOrderController.listBankDetails);
+router.get('/signaturesrecent', protect, purchaseOrderController.getUserSignatures);
 //signature
 router.post('/signatures', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.createSignature);
 router.get('/signatures', protect, SignatureController.getUserSignatures);
