@@ -33,6 +33,9 @@ router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
 router.get('/states/:countryId', protect, adminController.getStates);
 router.get('/cities/:stateId', protect, adminController.getCities);
+router.get('/country/:id', protect, adminController.getCountryById);
+router.get('/state/:id', protect, adminController.getStateById);
+router.get('/city/:id', protect, adminController.getCityById);
 router.get('/profile', protect, adminController.getProfile);
 router.put('/profile', protect, upload.single('profileImage'), updateProfileValidator, adminController.updateProfile);
 

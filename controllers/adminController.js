@@ -2,7 +2,7 @@ const User = require('../models/User');
 const Country = require('../models/Country');
 const State = require('../models/State');
 const City = require('../models/City');
-
+const mongoose = require('mongoose');
 exports.dashboard = async (req, res) => {
   const userData = await User.findById(req.user);
   res.json({
@@ -16,7 +16,7 @@ exports.getCountries = async (req, res) => {
     const { search } = req.query;
     const query = {};
     const projection = { _id: 1, name: 1 };
-    
+
     if (search) {
       query.name = { $regex: search, $options: 'i' };
       const countries = await Country.find(query, projection).lean();
@@ -36,7 +36,7 @@ exports.getStates = async (req, res) => {
     const { search } = req.query;
     const query = { country_id: countryId };
     const projection = { _id: 1, name: 1 };
-    
+
     if (search) {
       query.name = { $regex: search, $options: 'i' };
       const states = await State.find(query, projection).lean();
@@ -56,7 +56,7 @@ exports.getCities = async (req, res) => {
     const { search } = req.query;
     const query = { state_id: stateId };
     const projection = { _id: 1, name: 1 };
-    
+
     if (search) {
       query.name = { $regex: search, $options: 'i' };
       const cities = await City.find(query, projection).lean();
@@ -144,4 +144,64 @@ exports.updateProfile = async (req, res) => {
       error: err.message,
     });
   }
+
 };
+
+exports.getCountryById = async (req, res) => {
+    // FIX: Use parseInt for integer IDs and validate it's a number
+    const countryId = parseInt(req.params.id, 10);
+    if (isNaN(countryId)) {
+        return res.status(400).json({ message: 'Invalid country ID format. Must be an integer.' });
+    }
+
+    try {
+        const country = await Country.findById(countryId).lean();
+        if (!country) {
+            return res.status(404).json({ message: 'Country not found' });
+        }
+        res.json(country);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching country', error: err.message });
+    }
+};
+
+// -----
+
+exports.getStateById = async (req, res) => {
+    // FIX: Use parseInt for integer IDs and validate it's a number
+    const stateId = parseInt(req.params.id, 10);
+    
+    if (isNaN(stateId)) {
+        return res.status(400).json({ message: 'Invalid state ID format. Must be an integer.' });
+    }
+    
+    try {
+        const state = await State.findById(stateId).lean();
+        if (!state) {
+            return res.status(404).json({ message: 'State not found' });
+        }
+        res.json(state);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching state', error: err.message });
+    }
+};
+
+// -----
+
+exports.getCityById = async (req, res) => {
+    // FIX: Use parseInt for integer IDs and validate it's a number
+    const cityId = parseInt(req.params.id, 10);
+    if (isNaN(cityId)) {
+        return res.status(400).json({ message: 'Invalid city ID format. Must be an integer.' });
+    }
+
+    try {
+        const city = await City.findById(cityId).lean();
+        if (!city) {
+            return res.status(404).json({ message: 'City not found' });
+        }
+        res.json(city);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching city', error: err.message });
+    }
+};  

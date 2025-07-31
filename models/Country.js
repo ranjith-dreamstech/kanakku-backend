@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const countrySchema = new mongoose.Schema({
+  _id: Number,
   name: String,
   iso3: String,
   iso2: String,
