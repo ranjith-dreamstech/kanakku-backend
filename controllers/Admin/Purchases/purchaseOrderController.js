@@ -259,48 +259,91 @@ const getUserById = async (req, res) => {
 };
 const getRecentProductsWithSearch = async (req, res) => {
     try {
-        const { search = '' } = req.query;
+        const { search = '', limit = 10 } = req.query;
+        const numLimit = parseInt(limit);
         
         // Build search query
         const searchQuery = {
             $or: [
-                { product_name: { $regex: search, $options: 'i' } },
+                 { product_name: { $regex: search, $options: 'i' } },
                 { product_code: { $regex: search, $options: 'i' } },
                 { description: { $regex: search, $options: 'i' } }
             ]
         };
 
-        // Get products - if search is empty, get last 10, otherwise get all matching
+        // Get products with full details
         const products = await Product.find(search ? searchQuery : {})
             .populate('category', 'category_name')
             .populate('brand', 'brand_name')
+            .populate('unit', 'unit_name')
+            .populate('tax', 'name rate')
             .sort({ createdAt: -1 })
-            .limit(search ? 0 : 10); // No limit when searching
+            .limit(search ? 0 : numLimit); // No limit when searching
 
-        // Format response
+        // Format response with all product details
         const formattedProducts = products.map(product => ({
             id: product._id,
-            name: product.product_name,
-            code: product.product_code,
-            price: product.price,
-            stock: product.stock,
-            category: product.category?.category_name || null,
-            brand: product.brand?.brand_name || null,
-            image: product.image_url || null,
-            createdAt: product.createdAt
+            item_type: product.item_type,
+            name: product.name,
+            code: product.code,
+            category: {
+                id: product.category?._id,
+                name: product.category?.category_name
+            },
+            brand: {
+                id: product.brand?._id,
+                name: product.brand?.brand_name
+            },
+            unit: {
+                id: product.unit?._id,
+                name: product.unit?.unit_name
+            },
+            prices: {
+                selling: product.selling_price,
+                purchase: product.purchase_price
+            },
+            discount: {
+                type: product.discount_type,
+                value: product.discount_value
+            },
+            tax: product.tax ? {
+                id: product.tax._id,
+                name: product.tax.name,
+                rate: product.tax.rate
+            } : null,
+            barcode: product.barcode,
+            stock: {
+                quantity: product.stock, // Assuming you have stock field
+                alert_quantity: product.alert_quantity
+            },
+            description: product.description,
+            images: {
+                main: product.product_image,
+                gallery: product.gallery_images || []
+            },
+            status: product.status,
+            createdAt: product.createdAt,
+            updatedAt: product.updatedAt
         }));
 
         res.status(200).json({
+            success: true,
             message: search 
-                ? 'Search results for products' 
-                : 'Last 10 products retrieved',
+                ? 'Product search results' 
+                : `Last ${numLimit} products retrieved`,
             data: formattedProducts,
-            count: formattedProducts.length
+            count: formattedProducts.length,
+            pagination: {
+                limit: numLimit,
+                returned: formattedProducts.length
+            }
         });
     } catch (error) {
+        console.error('Product fetch error:', error);
         res.status(500).json({ 
-            message: 'Server error', 
-            error: error.message 
+            success: false,
+            message: 'Server error while fetching products', 
+            error: process.env.NODE_ENV === 'development' ? error.message : null
         });
     }
 };
