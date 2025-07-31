@@ -3,12 +3,31 @@ const TaxGroup = require('../models/TaxGroup');
 // Get all tax groups
 exports.getAllTaxGroups = async (req, res) => {
     try {
-        const taxGroups = await TaxGroup.find()
-                          .populate('tax_rate_ids')
-                          .sort({ createdAt: -1 });
+        const { page = 1, limit = 10, search = '' } = req.query;
+        
+        // Build search query
+        const searchQuery = {
+            $or: [
+                { tax_group_name: { $regex: search, $options: 'i' } },
+                { tax_group_description: { $regex: search, $options: 'i' } }
+            ]
+        };
+
+        // Get total count for pagination
+        const total = await TaxGroup.countDocuments(searchQuery);
+
+        // Get paginated results with populated tax rates
+        const taxGroups = await TaxGroup.find(searchQuery)
+            .populate('tax_rate_ids')
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(Number(limit));
 
         const result = taxGroups.map(taxGroup => {
-            const totalTaxRate = taxGroup.tax_rate_ids.reduce((sum, rate) => sum + (rate.tax_rate || 0), 0);
+            const totalTaxRate = taxGroup.tax_rate_ids.reduce(
+                (sum, rate) => sum + (rate?.tax_rate || 0), 
+                0
+            );
 
             return {
                 ...taxGroup.toObject(),
@@ -16,12 +35,25 @@ exports.getAllTaxGroups = async (req, res) => {
             };
         });
 
-        res.status(200).json(result);
+        res.status(200).json({
+            message: 'Tax groups fetched successfully',
+            data: {
+                taxGroups: result,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
+            }
+        });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to fetch tax groups', error: err.message });
+        res.status(500).json({ 
+            message: 'Failed to fetch tax groups',
+            error: err.message 
+        });
     }
 };
-
 // Create new tax group
 exports.createTaxGroup = async (req, res) => {
     try {

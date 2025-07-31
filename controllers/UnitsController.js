@@ -3,13 +3,43 @@ const Unit = require('../models/Unit');
 // @desc Get all units
 exports.getUnits = async (req, res) => {
   try {
-    const units = await Unit.find();
-    res.json({
+    const { page = 1, limit = 10, search = '' } = req.query;
+    
+    // Build search query
+    const searchQuery = {
+      $or: [
+        { unit_name: { $regex: search, $options: 'i' } },
+        { unit_code: { $regex: search, $options: 'i' } },
+        { unit_description: { $regex: search, $options: 'i' } }
+      ]
+    };
+
+    // Get total count for pagination
+    const total = await Unit.countDocuments(searchQuery);
+
+    // Get paginated results
+    const units = await Unit.find(searchQuery)
+      .sort({ createdAt: -1 }) // Sort by newest first
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    res.status(200).json({
       message: 'Units fetched successfully',
-      data: units,
+      data: {
+        units,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / limit)
+        }
+      }
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({ 
+      message: 'Failed to fetch units',
+      error: err.message 
+    });
   }
 };
 

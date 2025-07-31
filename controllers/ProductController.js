@@ -30,14 +30,45 @@ exports.createProduct = async (req, res) => {
 };
 exports.getAllProducts = async (req, res) => {
     try {
-        const products = await Product.find({})
-            .populate('category', 'category_name') 
-            .populate('brand', 'brand_name')
-            .sort({ createdAt: -1 }); 
+        const { page = 1, limit = 10, search = '' } = req.query;
+        
+        // Build search query
+        const searchQuery = {
+            $or: [
+                { product_name: { $regex: search, $options: 'i' } },
+                { product_code: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ]
+        };
 
-        res.status(200).json(products);
+        // Get total count for pagination
+        const total = await Product.countDocuments(searchQuery);
+
+        // Get paginated results with populated fields
+        const products = await Product.find(searchQuery)
+            .populate('category', 'category_name')
+            .populate('brand', 'brand_name')
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(Number(limit));
+
+        res.status(200).json({
+            message: 'Products fetched successfully',
+            data: {
+                products,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
+            }
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Server error', error: error.message });
+        res.status(500).json({ 
+            message: 'Server error', 
+            error: error.message 
+        });
     }
 };
 
