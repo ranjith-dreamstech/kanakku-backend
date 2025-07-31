@@ -12,6 +12,7 @@ const purchaseOrderController = require('@controllers/Admin/Purchases/purchaseOr
 const SignatureController = require('../controllers/SignatureController');
 const BankDetailController = require('@controllers/bankDetailController');
 const CompanySettings = require('@controllers/CompanySettingsController');
+const { uploadCompanyFields, handleUploadError } = require('../middleware/uploadCompanyImages');
 const protect = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 const { uploadSingle, uploadMultiple, uploadProductFields } = require('../middleware/uploadProductImages');
@@ -75,6 +76,7 @@ router.post(
   '/products',
   protect,
   uploadProductFields,
+  handleUploadError,
   createProductValidator,
   ProductController.createProduct
 );
@@ -119,36 +121,14 @@ router.get('/bank-accounts', protect, BankDetailController.listBankDetails);
 router.put('/bank-accounts/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
 router.delete('/bank-accounts/:id', protect, BankDetailController.deleteBankDetail);
 router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankDetailController.updateBankDetailStatus);
-// Configure storage for company files
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, '../public/uploads/company'));
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
 
-
-
-
-// Define the fields for multiple file uploads
-const uploadFields = upload.fields([
-  { name: 'siteLogo', maxCount: 1 },
-  { name: 'favicon', maxCount: 1 },
-  { name: 'companyLogo', maxCount: 1 }
-]);
-
-// Get company settings
-router.get('/company-details/:userId', CompanySettings.getCompanySettings);
-
-// Update company settings with multiple file upload support
 router.put(
   '/company-details/:userId',
-  uploadFields,
+  uploadCompanyFields,
+  handleUploadError,
   updateCompanySettingsValidator,
   CompanySettings.updateCompanySettings
 );
+router.get('/company-details/:userId', CompanySettings.getCompanySettings);
 
 module.exports = router;

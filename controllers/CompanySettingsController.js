@@ -94,21 +94,27 @@ const updateCompanySettings = async (req, res) => {
         // Process uploaded files
         if (req.files) {
             // Handle site logo
-            if (req.files.siteLogo) {
+            if (req.files.siteLogo && req.files.siteLogo[0]) {
                 await deleteOldFile(currentSettings.siteLogo);
                 updates.siteLogo = `/uploads/company/${req.files.siteLogo[0].filename}`;
             }
 
             // Handle favicon
-            if (req.files.favicon) {
+            if (req.files.favicon && req.files.favicon[0]) {
                 await deleteOldFile(currentSettings.favicon);
                 updates.favicon = `/uploads/company/${req.files.favicon[0].filename}`;
             }
 
             // Handle company logo
-            if (req.files.companyLogo) {
+            if (req.files.companyLogo && req.files.companyLogo[0]) {
                 await deleteOldFile(currentSettings.companyLogo);
                 updates.companyLogo = `/uploads/company/${req.files.companyLogo[0].filename}`;
+            }
+
+            // Handle company banner
+            if (req.files.companyBanner && req.files.companyBanner[0]) {
+                await deleteOldFile(currentSettings.companyBanner);
+                updates.companyBanner = `/uploads/company/${req.files.companyBanner[0].filename}`;
             }
         }
 
@@ -128,10 +134,22 @@ const updateCompanySettings = async (req, res) => {
             }
         );
 
+        // Format response with full URLs for images
+        const settingsData = settings.toObject();
+        const imageFields = ['siteLogo', 'favicon', 'companyLogo', 'companyBanner'];
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        
+        imageFields.forEach(field => {
+            if (settingsData[field]) {
+                const cleanedPath = settingsData[field].replace(/^[\\/]+/, '');
+                settingsData[field] = `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
+            }
+        });
+
         res.status(200).json({
             success: true,
             message: 'Company settings updated successfully',
-            data: settings
+            data: settingsData
         });
 
     } catch (err) {
@@ -140,10 +158,12 @@ const updateCompanySettings = async (req, res) => {
         // Clean up uploaded files if error occurred
         if (req.files) {
             for (const fileType in req.files) {
-                const file = req.files[fileType][0];
-                const filePath = path.join(__dirname, '../public/uploads/company', file.filename);
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
+                if (req.files[fileType] && req.files[fileType][0]) {
+                    const file = req.files[fileType][0];
+                    const filePath = path.join(__dirname, '../public/uploads/company', file.filename);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
                 }
             }
         }
