@@ -117,6 +117,7 @@ router.get('/user/:id', protect, purchaseOrderController.getUserById);
 router.get('/productsrecent', protect, purchaseOrderController.getRecentProductsWithSearch);
 router.get('/bankdetailsrecent', protect, purchaseOrderController.listBankDetails);
 router.get('/signaturesrecent', protect, purchaseOrderController.getUserSignatures);
+router.get('/tax-group-details', protect, purchaseOrderController.getAllTaxGroupsDetails);
 //signature
 router.post('/signatures', protect, upload.single('signatureImage'), createSignatureValidator, SignatureController.createSignature);
 router.get('/signatures', protect, SignatureController.getUserSignatures);

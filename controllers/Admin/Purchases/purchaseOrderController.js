@@ -4,6 +4,7 @@ const User = require('@models/User');
 const Product = require('@models/Product');
 const BankDetail = require('@models/BankDetail');
 const Signature = require('@models/Signature');
+const TaxGroup = require('@models/TaxGroup');
 
 // Create a new purchase order
 const createPurchaseOrder = async (req, res) => {
@@ -936,6 +937,65 @@ const deletePurchaseOrder = async (req, res) => {
         });
     }
 };
+const getAllTaxGroupsDetails = async (req, res) => {
+    try {
+        const { search } = req.query;
+        
+        // Build the query
+        const query = {};
+        if (search) {
+            query.$or = [
+                { tax_name: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Fetch all tax groups with populated tax rates
+        const taxGroups = await TaxGroup.find(query)
+            .populate({
+                path: 'tax_rate_ids',
+                select: 'tax_name tax_rate status createdAt updatedAt'
+            })
+            .sort({ createdAt: -1 });
+
+        // Format response with detailed tax rate information
+        const result = taxGroups.map(taxGroup => {
+            const totalTaxRate = taxGroup.tax_rate_ids.reduce(
+                (sum, rate) => sum + (rate.tax_rate || 0), 0
+            );
+
+            return {
+                _id: taxGroup._id,
+                tax_name: taxGroup.tax_name,
+                status: taxGroup.status,
+                created_on: taxGroup.created_on,
+                createdAt: taxGroup.createdAt,
+                updatedAt: taxGroup.updatedAt,
+                total_tax_rate: totalTaxRate,
+                tax_rates: taxGroup.tax_rate_ids.map(rate => ({
+                    _id: rate._id,
+                    tax_name: rate.tax_name,
+                    tax_rate: rate.tax_rate,
+                    status: rate.status,
+                    createdAt: rate.createdAt,
+                    updatedAt: rate.updatedAt
+                }))
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: result,
+            count: result.length
+        });
+    } catch (err) {
+        res.status(500).json({ 
+            success: false,
+            message: 'Failed to fetch tax groups', 
+            error: err.message 
+        });
+    }
+};
 
 module.exports = {
     createPurchaseOrder,
@@ -947,5 +1007,6 @@ module.exports = {
     listPurchaseOrders,
     getPurchaseOrderById,
     updatePurchaseOrder,
-    deletePurchaseOrder
+    deletePurchaseOrder,
+    getAllTaxGroupsDetails
 };
