@@ -86,7 +86,7 @@ userSchema.virtual('profileImageUrl').get(function () {
   if (!this.profileImage) {
     return 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile';
   }
-  return `http://127.0.0.1:5000${this.profileImage}`;
+  return `http://127.0.0.1:5000/${this.profileImage}`;
 });
 
 userSchema.methods.matchPassword = async function (enteredPassword) {
