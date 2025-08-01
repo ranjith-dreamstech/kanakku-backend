@@ -265,8 +265,8 @@ const getRecentProductsWithSearch = async (req, res) => {
         // Build search query
         const searchQuery = {
             $or: [
-                 { product_name: { $regex: search, $options: 'i' } },
-                { product_code: { $regex: search, $options: 'i' } },
+                { name: { $regex: search, $options: 'i' } },
+                { code: { $regex: search, $options: 'i' } },
                 { description: { $regex: search, $options: 'i' } }
             ]
         };
@@ -276,54 +276,85 @@ const getRecentProductsWithSearch = async (req, res) => {
             .populate('category', 'category_name')
             .populate('brand', 'brand_name')
             .populate('unit', 'unit_name')
-            .populate('tax', 'name rate')
+            .populate({
+                path: 'tax',
+                model: 'TaxGroup',
+                populate: {
+                    path: 'tax_rate_ids',
+                    model: 'TaxRate',
+                    select: 'tax_name tax_rate status'
+                }
+            })
             .sort({ createdAt: -1 })
             .limit(search ? 0 : numLimit); // No limit when searching
 
         // Format response with all product details
-        const formattedProducts = products.map(product => ({
-            id: product._id,
-            item_type: product.item_type,
-            name: product.name,
-            code: product.code,
-            category: {
-                id: product.category?._id,
-                name: product.category?.category_name
-            },
-            brand: {
-                id: product.brand?._id,
-                name: product.brand?.brand_name
-            },
-            unit: {
-                id: product.unit?._id,
-                name: product.unit?.unit_name
-            },
-            prices: {
-                selling: product.selling_price,
-                purchase: product.purchase_price
-            },
-            discount: {
-                type: product.discount_type,
-                value: product.discount_value
-            },
-            tax: product.tax ? {
-                id: product.tax._id,
-                name: product.tax.name,
-                rate: product.tax.rate
-            } : null,
-            barcode: product.barcode,
-            stock: {
-                quantity: product.stock, // Assuming you have stock field
-                alert_quantity: product.alert_quantity
-            },
-            description: product.description,
-            images: {
-                main: product.product_image,
-                gallery: product.gallery_images || []
-            },
-            status: product.status,
-            createdAt: product.createdAt,
-            updatedAt: product.updatedAt
+        const formattedProducts = await Promise.all(products.map(async (product) => {
+            // Calculate total tax rate
+            let totalTaxRate = 0;
+            let taxDetails = null;
+            
+            if (product.tax) {
+                totalTaxRate = product.tax.tax_rate_ids.reduce(
+                    (total, rate) => total + (rate.tax_rate || 0), 0
+                );
+                
+                taxDetails = {
+                    group_id: product.tax._id,
+                    group_name: product.tax.tax_name,
+                    total_rate: totalTaxRate,
+                    components: product.tax.tax_rate_ids.map(rate => ({
+                        rate_id: rate._id,
+                        name: rate.tax_name,
+                        rate: rate.tax_rate,
+                        status: rate.status
+                    }))
+                };
+            }
+
+            return {
+                id: product._id,
+                item_type: product.item_type,
+                name: product.name,
+                code: product.code,
+                category: {
+                    id: product.category?._id,
+                    name: product.category?.category_name
+                },
+                brand: {
+                    id: product.brand?._id,
+                    name: product.brand?.brand_name
+                },
+                unit: {
+                    id: product.unit?._id,
+                    name: product.unit?.unit_name
+                },
+                prices: {
+                    selling: product.selling_price,
+                    purchase: product.purchase_price,
+                    // Calculate tax-inclusive prices if needed
+                    selling_with_tax: product.selling_price * (1 + totalTaxRate / 100),
+                    purchase_with_tax: product.purchase_price * (1 + totalTaxRate / 100)
+                },
+                discount: {
+                    type: product.discount_type,
+                    value: product.discount_value
+                },
+                tax: taxDetails,
+                barcode: product.barcode,
+                stock: {
+                    quantity: product.stock,
+                    alert_quantity: product.alert_quantity
+                },
+                description: product.description,
+                images: {
+                    main: product.product_image,
+                    gallery: product.gallery_images || []
+                },
+                status: product.status,
+                createdAt: product.createdAt,
+                updatedAt: product.updatedAt
+            };
         }));
 
         res.status(200).json({
