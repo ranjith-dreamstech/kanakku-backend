@@ -15,7 +15,22 @@ const getCompanySettings = async (req, res) => {
             });
         }
 
-        const settings = await CompanySettings.findOne({ userId });
+        const settings = await CompanySettings.findOne({ userId })
+            .populate({
+                path: 'country',
+                model: 'Country',
+                select: 'name iso3 iso2 phonecode currency'
+            })
+            .populate({
+                path: 'state',
+                model: 'State',
+                select: 'name state_code'
+            })
+            .populate({
+                path: 'city',
+                model: 'City',
+                select: 'name'
+            });
 
         if (!settings) {
             return res.status(404).json({
@@ -36,6 +51,27 @@ const getCompanySettings = async (req, res) => {
                 settingsData[field] = `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
             }
         });
+
+        // Add location details to the response without modifying existing structure
+        settingsData.locationDetails = {
+            country: settings.country ? {
+                id: settings.country._id,
+                name: settings.country.name,
+                iso3: settings.country.iso3,
+                iso2: settings.country.iso2,
+                phonecode: settings.country.phonecode,
+                currency: settings.country.currency
+            } : null,
+            state: settings.state ? {
+                id: settings.state._id,
+                name: settings.state.name,
+                code: settings.state.state_code
+            } : null,
+            city: settings.city ? {
+                id: settings.city._id,
+                name: settings.city.name
+            } : null
+        };
 
         res.status(200).json({
             success: true,

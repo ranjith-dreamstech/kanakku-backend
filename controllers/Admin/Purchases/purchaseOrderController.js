@@ -262,17 +262,16 @@ const getRecentProductsWithSearch = async (req, res) => {
         const { search = '', limit = 10 } = req.query;
         const numLimit = parseInt(limit);
         
-        // Build search query
         const searchQuery = {
             $or: [
                 { name: { $regex: search, $options: 'i' } },
                 { code: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
+                { description: { $regex: search, $options: 'i' } },
+                { barcode: { $regex: search, $options: 'i' } }
             ]
         };
 
-        // Get products with full details
-        const products = await Product.find(search ? searchQuery : {})
+        const products = await Product.find(search.trim() ? searchQuery : {})
             .populate('category', 'category_name')
             .populate('brand', 'brand_name')
             .populate('unit', 'unit_name')
@@ -286,9 +285,8 @@ const getRecentProductsWithSearch = async (req, res) => {
                 }
             })
             .sort({ createdAt: -1 })
-            .limit(search ? 0 : numLimit); // No limit when searching
+            .limit(search.trim() ? 0 : numLimit);
 
-        // Format response with all product details
         const formattedProducts = await Promise.all(products.map(async (product) => {
             // Calculate total tax rate
             let totalTaxRate = 0;
@@ -332,7 +330,6 @@ const getRecentProductsWithSearch = async (req, res) => {
                 prices: {
                     selling: product.selling_price,
                     purchase: product.purchase_price,
-                    // Calculate tax-inclusive prices if needed
                     selling_with_tax: product.selling_price * (1 + totalTaxRate / 100),
                     purchase_with_tax: product.purchase_price * (1 + totalTaxRate / 100)
                 },
@@ -359,7 +356,7 @@ const getRecentProductsWithSearch = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: search 
+            message: search.trim() 
                 ? 'Product search results' 
                 : `Last ${numLimit} products retrieved`,
             data: formattedProducts,
