@@ -695,7 +695,11 @@ const getPurchaseOrderById = async (req, res) => {
         })
         .populate('vendorId', 'firstName lastName email phone address')
         .populate('signatureId', 'signatureName signatureImage')
-        .populate('bank', 'bankName accountNumber IFSCCode')
+        .populate({
+            path: 'bank',
+            model: 'BankDetail',
+            select: 'bankName accountNumber IFSCCode accountHoldername branchName'
+        })
         .populate('items.productId', 'product_name product_code price stock image_url')
         .populate('items.unit', 'unit_name');
 
@@ -730,21 +734,26 @@ const getPurchaseOrderById = async (req, res) => {
             tax: item.tax,
             taxInfo: item.taxInfo,
             amount: item.amount,
-            discountType: item.discountType
+            discountType: item.discountType,
+            isRateFormUpdated: item.isRateFormUpdated,
+            form_updated_discounttype: item.form_updated_discounttype,
+            form_updated_discount: item.form_updated_discount,
+            form_updated_rate: item.form_updated_rate,
+            form_updated_tax: item.form_updated_tax
         }));
 
         // Format signature based on sign_type
         const baseUrl = `${req.protocol}://${req.get('host')}/`;
         let signature = null;
 
-        if (purchaseOrder.sign_type === 'eSignature') {
+        if (purchaseOrder.sign_type === 'manualSignature') {
             signature = {
                 name: purchaseOrder.signatureName,
                 image: purchaseOrder.signatureImage 
                     ? `${baseUrl}${purchaseOrder.signatureImage.replace(/\\/g, '/')}`
                     : null
             };
-        } else if (purchaseOrder.signatureId) {
+        } else if (purchaseOrder.sign_type === 'digitalSignature' && purchaseOrder.signatureId) {
             signature = {
                 id: purchaseOrder.signatureId._id,
                 name: purchaseOrder.signatureId.signatureName,
@@ -783,9 +792,11 @@ const getPurchaseOrderById = async (req, res) => {
             signature: signature,
             bank: purchaseOrder.bank ? {
                 id: purchaseOrder.bank._id,
-                name: purchaseOrder.bank.bankName,
+                bankName: purchaseOrder.bank.bankName,
                 accountNumber: purchaseOrder.bank.accountNumber,
-                IFSCCode: purchaseOrder.bank.IFSCCode
+                accountHolderName: purchaseOrder.bank.accountHoldername,
+                branchName: purchaseOrder.bank.branchName,
+                ifscCode: purchaseOrder.bank.IFSCCode
             } : null,
             convert_type: purchaseOrder.convert_type,
             createdAt: purchaseOrder.createdAt,
@@ -803,12 +814,11 @@ const getPurchaseOrderById = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching purchase order',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+            error: err.message
         });
     }
 };
 
-// Update purchase order
 const updatePurchaseOrder = async (req, res) => {
     try {
         const { id } = req.params;
@@ -839,17 +849,17 @@ const updatePurchaseOrder = async (req, res) => {
         // Validate vendor if provided
         if (updates.vendorId) {
             const vendor = await User.findById(updates.vendorId);
-            if (!vendor || vendor.user_type !== 2) {
+            if (!vendor) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Invalid vendor ID or vendor is not a supplier'
+                    message: 'Invalid vendor ID'
                 });
             }
         }
 
         // Validate signature type if provided
         if (updates.sign_type) {
-            const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
+            const validSignatureTypes = ['none', 'digitalSignature', 'manualSignature'];
             if (!validSignatureTypes.includes(updates.sign_type)) {
                 return res.status(400).json({
                     success: false,
@@ -858,18 +868,18 @@ const updatePurchaseOrder = async (req, res) => {
             }
         }
 
-        // Validate eSignature data if provided
-        if (updates.sign_type === 'eSignature') {
+        // Validate manual signature data if provided
+        if (updates.sign_type === 'manualSignature') {
             if (!req.file && !existingOrder.signatureImage) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Signature image is required for eSignature'
+                    message: 'Signature image is required for manual signature'
                 });
             }
             if (!updates.signatureName && !existingOrder.signatureName) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Signature name is required for eSignature'
+                    message: 'Signature name is required for manual signature'
                 });
             }
         }
@@ -917,13 +927,13 @@ const updatePurchaseOrder = async (req, res) => {
         if (req.file) {
             updates.signatureImage = req.file.path;
             
-            // If updating to eSignature, ensure we have a name
-            if (updates.sign_type === 'eSignature' && !updates.signatureName) {
+            // If updating to manualSignature, ensure we have a name
+            if (updates.sign_type === 'manualSignature' && !updates.signatureName) {
                 updates.signatureName = existingOrder.signatureName || 'Untitled Signature';
             }
         }
 
-        // If changing to digitalSignature, clear eSignature fields
+        // If changing to digitalSignature, clear manual signature fields
         if (updates.sign_type === 'digitalSignature') {
             updates.signatureName = null;
             updates.signatureImage = null;
@@ -950,12 +960,16 @@ const updatePurchaseOrder = async (req, res) => {
             }
         )
         .populate('vendorId', 'firstName lastName email phone')
-        .populate('signatureId', 'signatureName')
-        .populate('bank', 'bankName accountNumber');
+        .populate('signatureId', 'signatureName signatureImage')
+        .populate({
+            path: 'bank',
+            model: 'BankDetail',
+            select: 'bankName accountNumber IFSCCode accountHoldername'
+        });
 
         // Format signature for response
         let signature = null;
-        if (updatedOrder.sign_type === 'eSignature') {
+        if (updatedOrder.sign_type === 'manualSignature') {
             const baseUrl = `${req.protocol}://${req.get('host')}/`;
             signature = {
                 name: updatedOrder.signatureName,
@@ -963,10 +977,14 @@ const updatePurchaseOrder = async (req, res) => {
                     ? `${baseUrl}${updatedOrder.signatureImage.replace(/\\/g, '/')}`
                     : null
             };
-        } else if (updatedOrder.signatureId) {
+        } else if (updatedOrder.sign_type === 'digitalSignature' && updatedOrder.signatureId) {
+            const baseUrl = `${req.protocol}://${req.get('host')}/`;
             signature = {
                 id: updatedOrder.signatureId._id,
-                name: updatedOrder.signatureId.signatureName
+                name: updatedOrder.signatureId.signatureName,
+                image: updatedOrder.signatureId.signatureImage 
+                    ? `${baseUrl}${updatedOrder.signatureId.signatureImage.replace(/\\/g, '/')}`
+                    : null
             };
         }
 
@@ -984,6 +1002,13 @@ const updatePurchaseOrder = async (req, res) => {
                 TotalAmount: updatedOrder.TotalAmount,
                 sign_type: updatedOrder.sign_type,
                 signature: signature,
+                bank: updatedOrder.bank ? {
+                    id: updatedOrder.bank._id,
+                    bankName: updatedOrder.bank.bankName,
+                    accountNumber: updatedOrder.bank.accountNumber,
+                    accountHolderName: updatedOrder.bank.accountHoldername,
+                    ifscCode: updatedOrder.bank.IFSCCode
+                } : null,
                 updatedAt: updatedOrder.updatedAt
             }
         });
