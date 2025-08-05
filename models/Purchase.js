@@ -1,34 +1,23 @@
 const mongoose = require('mongoose');
 
-const purchaseOrderSchema = new mongoose.Schema({
-    purchaseOrderId: {
+const purchaseSchema = new mongoose.Schema({
+    purchaseId: {
         type: String,
-        unique: true
+        unique: true,
+        required: true
     },
     vendorId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
     },
-    purchaseOrderDate: {
+    purchaseDate: {
         type: Date,
         default: Date.now,
         required: true
     },
-    dueDate: {
-        type: Date,
-        required: true
-    },
-    referenceNo: {
-        type: String,
-        default: ""
-    },
+    referenceNo: String,
     items: [{
-        name: {
-            type: String,
-            required: true
-        },
-        key: String,
         productId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Product',
@@ -36,52 +25,62 @@ const purchaseOrderSchema = new mongoose.Schema({
         },
         quantity: {
             type: Number,
-            required: true
+            required: true,
+            min: 1
         },
-        units: String,
         unit: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'Unit'
         },
         rate: {
             type: Number,
-            required: true
+            required: true,
+            min: 0
         },
-        discount: Number,
-        tax: Number,
-        taxInfo: mongoose.Schema.Types.Mixed,
+        discount: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+        tax: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
         amount: {
             type: Number,
-            required: true
+            required: true,
+            min: 0
         },
+        productName: String,
+        discountValue: Number,
         discountType: String,
-        isRateFormUpdated: Boolean,
-        form_updated_discounttype: String,
-        form_updated_discount: Number,
-        form_updated_rate: Number,
-        form_updated_tax: Number
+        taxType: String
     }],
     status: {
         type: String,
-        enum: ['NEW', 'PENDING', 'COMPLETED', 'CANCELLED'],
-        default: 'NEW'
+        enum: ['DRAFT', 'PENDING', 'PAID', 'CANCELLED', 'REFUNDED'],
+        default: 'DRAFT'
     },
     paymentMode: {
         type: String,
-        enum: ['CASH', 'CREDIT', 'CHECK', 'BANK_TRANSFER', 'OTHER'],
+        enum: ['CASH', 'CREDIT', 'CHEQUE', 'BANK_TRANSFER', 'ONLINE'],
         required: true
     },
     taxableAmount: {
         type: Number,
-        required: true
+        required: true,
+        min: 0
     },
     totalDiscount: {
         type: Number,
-        default: 0
+        default: 0,
+        min: 0
     },
     vat: {
         type: Number,
-        default: 0
+        default: 0,
+        min: 0
     },
     roundOff: {
         type: Boolean,
@@ -89,7 +88,8 @@ const purchaseOrderSchema = new mongoose.Schema({
     },
     TotalAmount: {
         type: Number,
-        required: true
+        required: true,
+        min: 0
     },
     bank: {
         type: mongoose.Schema.Types.ObjectId,
@@ -99,7 +99,7 @@ const purchaseOrderSchema = new mongoose.Schema({
     termsAndCondition: String,
     sign_type: {
         type: String,
-        enum: ['manualSignature', 'digitalSignature', 'none'],
+        enum: ['none', 'manualSignature', 'digitalSignature'],
         default: 'none'
     },
     signatureId: {
@@ -118,28 +118,31 @@ const purchaseOrderSchema = new mongoose.Schema({
         required: true
     },
     billFrom: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Address',
         required: true
     },
     billTo: {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Address',
         required: true
     },
-    convert_type: {
+    purchase_no: {
         type: String,
-        enum: ['purchase', 'estimate', 'invoice'],
-        default: 'purchase'
-    }
+        unique: true
+    },
+    supplierInvoiceSerialNumber: String,
+    taxType: String
 }, {
     timestamps: true
 });
 
-// Pre-save hook to generate purchase order ID
-purchaseOrderSchema.pre('save', async function(next) {
-    if (!this.purchaseOrderId) {
+// Pre-save hook for purchase ID generation
+purchaseSchema.pre('save', async function(next) {
+    if (!this.purchase_no) {
         try {
             const count = await this.constructor.countDocuments();
-            this.purchaseOrderId = `PO-${String(count + 1).padStart(6, '0')}`;
+            this.purchase_no = `PO-${String(count + 1).padStart(6, '0')}`;
             next();
         } catch (err) {
             next(err);
@@ -149,15 +152,15 @@ purchaseOrderSchema.pre('save', async function(next) {
     }
 });
 
-// Add validation based on sign_type
-purchaseOrderSchema.pre('validate', function(next) {
+// Validation based on sign_type
+purchaseSchema.pre('validate', function(next) {
     if (this.sign_type === 'manualSignature' && !this.signatureImage) {
         this.invalidate('signatureImage', 'Signature image is required for manual signature');
     }
     if (this.sign_type === 'digitalSignature' && !this.signatureId) {
         this.invalidate('signatureId', 'Signature ID is required for digital signature');
     }
-    
+
     // Clear unused signature fields
     if (this.sign_type === 'none') {
         this.signatureId = undefined;
@@ -165,12 +168,13 @@ purchaseOrderSchema.pre('validate', function(next) {
         this.signatureName = undefined;
     } else if (this.sign_type === 'manualSignature') {
         this.signatureId = undefined;
+        if (!this.signatureName) this.signatureName = 'Manual Signature';
     } else if (this.sign_type === 'digitalSignature') {
         this.signatureImage = undefined;
         this.signatureName = undefined;
     }
-    
+
     next();
 });
 
-module.exports = mongoose.model('PurchaseOrder', purchaseOrderSchema);
+module.exports = mongoose.model('Purchase', purchaseSchema);
