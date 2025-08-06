@@ -107,11 +107,11 @@ router.put('/suppliers/:id', protect, upload.single('profileImage'), SupplierCon
 router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 
 //purchase
-router.post('/purchase', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.createPurchase);
-router.get('/purchase', protect, purchaseController.getAllPurchases);
-router.get('/purchase/:id', protect, purchaseController.getPurchaseById);
-router.put('/purchase/:id', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.updatePurchase);
-router.delete('/purchase/:id', protect, purchaseController.deletePurchase);
+router.post('/purchases', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.createPurchase);
+router.get('/purchases', protect, purchaseController.getAllPurchases);
+router.get('/purchases/:id', protect, purchaseController.getPurchaseById);
+router.put('/purchases/:id', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.updatePurchase);
+router.delete('/purchases/:id', protect, purchaseController.deletePurchase);
 //purchaseOrder
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
 router.get('/purchase-orders', protect, purchaseOrderController.listPurchaseOrders);
