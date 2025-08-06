@@ -867,201 +867,184 @@ const getPurchaseOrderById = async (req, res) => {
 const updatePurchaseOrder = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user;
-        const updates = req.body;
+        const { 
+            vendorId,
+            orderDate,
+            dueDate,
+            referenceNo,
+            items,
+            status,
+            paymentMode,
+            notes,
+            termsAndCondition,
+            sign_type,
+            signatureId,
+            signatureName,
+            userId,
+            billFrom,
+            billTo,
+            convert_type
+        } = req.body;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid purchase order ID format'
-            });
-        }
-
-        // Check if purchase order exists and belongs to user
-        const existingOrder = await PurchaseOrder.findOne({ 
-            _id: id, 
-            userId, 
-            isDeleted: false 
-        });
-
+        // Validate purchase order exists
+        const existingOrder = await PurchaseOrder.findById(id);
         if (!existingOrder) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase order not found'
-            });
+            return res.status(404).json({ message: 'Purchase order not found' });
         }
 
-        // Validate vendor if provided
-        if (updates.vendorId) {
-            const vendor = await User.findById(updates.vendorId);
-            if (!vendor) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid vendor ID'
-                });
-            }
+        // Validate requesting user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(422).json({ message: 'Invalid user ID' });
         }
 
-        // Validate signature type if provided
-        if (updates.sign_type) {
-            const validSignatureTypes = ['none', 'digitalSignature', 'manualSignature'];
-            if (!validSignatureTypes.includes(updates.sign_type)) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid signature type'
-                });
+        // Get bill from and bill to user addresses if provided
+        if (billFrom || billTo) {
+            const billFromUser = billFrom ? await User.findById(billFrom) : null;
+            const billToUser = billTo ? await User.findById(billTo) : null;
+            
+            if ((billFrom && !billFromUser) || (billTo && !billToUser)) {
+                return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
             }
-        }
 
-        // Validate manual signature data if provided
-        if (updates.sign_type === 'manualSignature') {
-            if (!req.file && !existingOrder.signatureImage) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Signature image is required for manual signature'
-                });
-            }
-            if (!updates.signatureName && !existingOrder.signatureName) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Signature name is required for manual signature'
-                });
+            // Validate at least one address exists if updating both
+            if (billFrom && billTo && !billFromUser.address && !billToUser.address) {
+                return res.status(400).json({ message: 'Both bill from and bill to addresses are missing' });
             }
         }
 
         // Validate products in items if provided
-        if (updates.items && Array.isArray(updates.items)) {
-            for (const item of updates.items) {
-                if (item.productId) {
-                    const product = await Product.findById(item.productId);
-                    if (!product) {
-                        return res.status(400).json({
-                            success: false,
-                            message: `Invalid product ID: ${item.productId}`
-                        });
-                    }
+        if (items && Array.isArray(items)) {
+            for (const item of items) {
+                const product = await Product.findById(item.id);
+                if (!product) {
+                    return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
                 }
             }
         }
 
-        // Calculate amounts if items are updated
-        if (updates.items && Array.isArray(updates.items)) {
-            let taxableAmount = 0;
-            let totalDiscount = 0;
-            let vat = 0;
-            let totalAmount = 0;
+        // Validate signature type if provided
+        if (sign_type) {
+            const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
+            if (!validSignatureTypes.includes(sign_type)) {
+                return res.status(400).json({ message: 'Invalid signature type' });
+            }
+        }
 
-            updates.items.forEach(item => {
-                const itemAmount = item.quantity * (item.rate || 0);
+        // Validate signature data if eSignature is selected
+        if (sign_type === 'eSignature') {
+            if (!req.file && !existingOrder.signatureImage) {
+                return res.status(400).json({ message: 'Signature image is required for eSignature' });
+            }
+            if (!signatureName && !existingOrder.signatureName) {
+                return res.status(400).json({ message: 'Signature name is required for eSignature' });
+            }
+        }
+
+        // Calculate amounts if items are updated
+        let taxableAmount = existingOrder.taxableAmount;
+        let totalDiscount = existingOrder.totalDiscount;
+        let vat = existingOrder.vat;
+        let totalAmount = existingOrder.TotalAmount;
+
+        if (items && Array.isArray(items)) {
+            taxableAmount = 0;
+            totalDiscount = 0;
+            vat = 0;
+            totalAmount = 0;
+
+            items.forEach(item => {
+                const itemAmount = item.amount || (item.qty * (item.rate || 0));
                 const itemDiscount = item.discount || 0;
                 const itemTax = item.tax || 0;
                 
                 taxableAmount += itemAmount;
                 totalDiscount += itemDiscount;
                 vat += itemTax;
-                totalAmount += (itemAmount - itemDiscount + itemTax);
+                totalAmount += itemAmount;
             });
-
-            updates.taxableAmount = taxableAmount;
-            updates.totalDiscount = totalDiscount;
-            updates.vat = vat;
-            updates.TotalAmount = totalAmount;
         }
 
-        // Handle signature updates
-        if (req.file) {
-            updates.signatureImage = req.file.path;
-            
-            // If updating to manualSignature, ensure we have a name
-            if (updates.sign_type === 'manualSignature' && !updates.signatureName) {
-                updates.signatureName = existingOrder.signatureName || 'Untitled Signature';
-            }
-        }
-
-        // If changing to digitalSignature, clear manual signature fields
-        if (updates.sign_type === 'digitalSignature') {
-            updates.signatureName = null;
-            updates.signatureImage = null;
-        }
+        // Prepare update object
+        const updateData = {
+            vendorId: vendorId || existingOrder.vendorId,
+            purchaseOrderDate: orderDate ? new Date(orderDate) : existingOrder.purchaseOrderDate,
+            dueDate: dueDate ? new Date(dueDate) : existingOrder.dueDate,
+            referenceNo: referenceNo || existingOrder.referenceNo,
+            items: items ? items.map(item => ({
+                id: item.id,
+                name: item.name,
+                unit: item.unit,
+                qty: item.qty,
+                rate: item.rate,
+                discount: item.discount,
+                tax: item.tax,
+                tax_group_id: item.tax_group_id,
+                discount_type: item.discount_type,
+                discount_value: item.discount_value,
+                amount: item.amount
+            })) : existingOrder.items,
+            status: status || existingOrder.status,
+            paymentMode: paymentMode || existingOrder.paymentMode,
+            taxableAmount: taxableAmount,
+            totalDiscount: totalDiscount,
+            vat: vat,
+            TotalAmount: totalAmount,
+            bank: req.body.bank || existingOrder.bank,
+            notes: notes || existingOrder.notes,
+            termsAndCondition: termsAndCondition || existingOrder.termsAndCondition,
+            sign_type: sign_type || existingOrder.sign_type,
+            signatureId: signatureId || existingOrder.signatureId,
+            signatureImage: sign_type === 'eSignature' ? (req.file?.path || existingOrder.signatureImage) : null,
+            signatureName: sign_type === 'eSignature' ? (signatureName || existingOrder.signatureName) : null,
+            userId: userId || existingOrder.userId,
+            billFrom: billFrom || existingOrder.billFrom,
+            billTo: billTo || existingOrder.billTo,
+            convert_type: convert_type || existingOrder.convert_type
+        };
 
         // If changing to none, clear all signature fields
-        if (updates.sign_type === 'none') {
-            updates.signatureName = null;
-            updates.signatureImage = null;
-            updates.signatureId = null;
+        if (sign_type === 'none') {
+            updateData.signatureName = null;
+            updateData.signatureImage = null;
+            updateData.signatureId = null;
         }
 
-        // Remove protected fields
-        const protectedFields = ['_id', 'purchaseOrderId', 'userId', 'createdAt', 'updatedAt'];
-        protectedFields.forEach(field => delete updates[field]);
+        const updatedOrder = await PurchaseOrder.findByIdAndUpdate(id, updateData, { new: true });
 
-        // Update purchase order
-        const updatedOrder = await PurchaseOrder.findByIdAndUpdate(
-            id,
-            { $set: updates },
-            { 
-                new: true,
-                runValidators: true
-            }
-        )
-        .populate('vendorId', 'firstName lastName email phone')
-        .populate('signatureId', 'signatureName signatureImage')
-        .populate({
-            path: 'bank',
-            model: 'BankDetail',
-            select: 'bankName accountNumber IFSCCode accountHoldername'
-        });
-
-        // Format signature for response
-        let signature = null;
-        if (updatedOrder.sign_type === 'manualSignature') {
-            const baseUrl = `${req.protocol}://${req.get('host')}/`;
-            signature = {
-                name: updatedOrder.signatureName,
-                image: updatedOrder.signatureImage 
-                    ? `${baseUrl}${updatedOrder.signatureImage.replace(/\\/g, '/')}`
-                    : null
-            };
-        } else if (updatedOrder.sign_type === 'digitalSignature' && updatedOrder.signatureId) {
-            const baseUrl = `${req.protocol}://${req.get('host')}/`;
-            signature = {
-                id: updatedOrder.signatureId._id,
-                name: updatedOrder.signatureId.signatureName,
-                image: updatedOrder.signatureId.signatureImage 
-                    ? `${baseUrl}${updatedOrder.signatureId.signatureImage.replace(/\\/g, '/')}`
-                    : null
-            };
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'Purchase order updated successfully',
+        res.status(200).json({ 
+            message: 'Purchase order updated successfully', 
             data: {
-                id: updatedOrder._id,
-                purchaseOrderId: updatedOrder.purchaseOrderId,
-                vendor: updatedOrder.vendorId ? {
-                    id: updatedOrder.vendorId._id,
-                    name: `${updatedOrder.vendorId.firstName} ${updatedOrder.vendorId.lastName}`
-                } : null,
-                status: updatedOrder.status,
-                TotalAmount: updatedOrder.TotalAmount,
-                sign_type: updatedOrder.sign_type,
-                signature: signature,
-                bank: updatedOrder.bank ? {
-                    id: updatedOrder.bank._id,
-                    bankName: updatedOrder.bank.bankName,
-                    accountNumber: updatedOrder.bank.accountNumber,
-                    accountHolderName: updatedOrder.bank.accountHoldername,
-                    ifscCode: updatedOrder.bank.IFSCCode
-                } : null,
-                updatedAt: updatedOrder.updatedAt
+                purchaseOrder: {
+                    id: updatedOrder._id,
+                    purchaseOrderId: updatedOrder.purchaseOrderId,
+                    purchaseOrderDate: updatedOrder.purchaseOrderDate,
+                    dueDate: updatedOrder.dueDate,
+                    status: updatedOrder.status,
+                    TotalAmount: updatedOrder.TotalAmount,
+                    billFrom: updatedOrder.billFrom,
+                    billTo: updatedOrder.billTo,
+                    sign_type: updatedOrder.sign_type,
+                    signatureName: updatedOrder.signatureName,
+                    items: updatedOrder.items.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        unit: item.unit,
+                        qty: item.qty,
+                        rate: item.rate,
+                        discount: item.discount,
+                        tax: item.tax,
+                        tax_group_id: item.tax_group_id,
+                        discount_type: item.discount_type,
+                        discount_value: item.discount_value,
+                        amount: item.amount
+                    }))
+                }
             }
         });
-
     } catch (err) {
-        console.error('Update purchase order error:', err);
-        res.status(500).json({
-            success: false,
+        console.error(err);
+        res.status(500).json({ 
             message: 'Error updating purchase order',
             error: err.message
         });
