@@ -612,18 +612,22 @@ const listPurchaseOrders = async (req, res) => {
                 ? `${baseUrl}${order.signatureImage.replace(/\\/g, '/')}`
                 : null;
 
-            // Format dates
+            // Format dates as "dd, MMM yyyy"
             const formatDate = (date) => {
                 if (!date) return null;
-                return new Date(date).toISOString().split('T')[0];
+                const d = new Date(date);
+                const day = d.getDate().toString().padStart(2, '0');
+                const month = d.toLocaleString('default', { month: 'short' });
+                const year = d.getFullYear();
+                return `${day}, ${month} ${year}`;
             };
 
-            // Get billTo user details
+            // Get billTo user details - fixed to properly check billTo
             let billToDetails = null;
-            if (order.billTo && order.billTo._id) {
+            if (order.billTo) {
                 billToDetails = {
                     id: order.billTo._id,
-                    name: `${order.billTo.firstName} ${order.billTo.lastName}`,
+                    name: `${order.billTo.firstName || ''} ${order.billTo.lastName || ''}`.trim(),
                     email: order.billTo.email,
                     profileImage: order.billTo.profileImage 
                         ? `${baseUrl}${order.billTo.profileImage.replace(/\\/g, '/')}`
