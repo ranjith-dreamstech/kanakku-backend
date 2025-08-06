@@ -1,7 +1,14 @@
-// validators/purchaseValidator.js
 const { body } = require('express-validator');
 
 const purchaseValidator = [
+  body('purchaseOrderId')
+    .notEmpty().withMessage('Purchase order ID is required')
+    .isString().withMessage('Purchase order ID must be a string'),
+  
+  body('vendorId')
+    .notEmpty().withMessage('Vendor ID is required')
+    .isMongoId().withMessage('Invalid vendor ID format'),
+  
   body('purchaseDate')
     .notEmpty().withMessage('Purchase date is required')
     .isISO8601().withMessage('Invalid date format')
@@ -12,7 +19,7 @@ const purchaseValidator = [
   
   body('items.*.productId')
     .notEmpty().withMessage('Product ID is required')
-    .isMongoId().withMessage('Invalid Product ID format'),
+    .isMongoId().withMessage('Invalid product ID format'),
   
   body('items.*.quantity')
     .notEmpty().withMessage('Quantity is required')
@@ -24,41 +31,52 @@ const purchaseValidator = [
     .isNumeric().withMessage('Rate must be a number')
     .toFloat(),
   
-  body('paymentMode')
-    .notEmpty().withMessage('Payment mode is required')
-    .isIn(['CASH', 'CREDIT', 'CHECK', 'BANK_TRANSFER', 'OTHER'])
-    .withMessage('Invalid payment mode'),
-  
   body('userId')
     .notEmpty().withMessage('User ID is required')
-    .isMongoId().withMessage('Invalid User ID format'),
+    .isMongoId().withMessage('Invalid user ID format'),
   
   body('billFrom')
     .notEmpty().withMessage('Bill from user ID is required')
-    .isMongoId().withMessage('Invalid Bill from user ID format'),
+    .isMongoId().withMessage('Invalid bill from user ID format'),
   
   body('billTo')
     .notEmpty().withMessage('Bill to user ID is required')
-    .isMongoId().withMessage('Invalid Bill to user ID format'),
-  
-  body('vendorId')
-    .notEmpty().withMessage('Vendor ID is required')
-    .isMongoId().withMessage('Invalid Vendor ID format'),
+    .isMongoId().withMessage('Invalid bill to user ID format'),
   
   // Optional fields
   body('referenceNo').optional().isString(),
-  body('supplierInvoiceSerialNumber').optional().isString(),
   body('notes').optional().isString(),
   body('termsAndCondition').optional().isString(),
-  body('sign_type').optional().isIn(['manualSignature', 'digitalSignature', 'none']),
-  body('signatureId').optional().isMongoId(),
-  body('bank').optional().isMongoId(),
-  body('taxableAmount').optional().isNumeric(),
-  body('totalDiscount').optional().isNumeric(),
-  body('vat').optional().isNumeric(),
-  body('totalAmount').optional().isNumeric(),
-  body('discountType').optional().isMongoId(),
-  body('discount').optional().isNumeric()
+  body('paidAmount').optional().isNumeric().toFloat(),
+  body('bank').optional().isMongoId()
 ];
 
-module.exports = purchaseValidator;
+const supplierPaymentValidator = [
+  body('purchaseId')
+    .notEmpty().withMessage('Purchase ID is required')
+    .isMongoId().withMessage('Invalid purchase ID format'),
+  
+  body('amount')
+    .notEmpty().withMessage('Amount is required')
+    .isNumeric().withMessage('Amount must be a number')
+    .toFloat(),
+  
+  body('paymentDate')
+    .notEmpty().withMessage('Payment date is required')
+    .isISO8601().withMessage('Invalid date format')
+    .toDate(),
+  
+  body('userId')
+    .notEmpty().withMessage('User ID is required')
+    .isMongoId().withMessage('Invalid user ID format'),
+  
+  // Optional fields
+  body('paymentMode').optional().isMongoId(),
+  body('referenceNumber').optional().isString(),
+  body('notes').optional().isString()
+];
+
+module.exports = {
+  purchaseValidator,
+  supplierPaymentValidator
+};

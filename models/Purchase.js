@@ -1,10 +1,13 @@
-// models/Purchase.js
 const mongoose = require('mongoose');
 
 const purchaseSchema = new mongoose.Schema({
   purchaseId: {
     type: String,
     unique: true
+  },
+  purchaseOrderId: {
+    type: String,
+    required: true
   },
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -16,11 +19,11 @@ const purchaseSchema = new mongoose.Schema({
     default: Date.now,
     required: true
   },
-  referenceNo: {
-    type: String,
-    default: ""
+  dueDate: {
+    type: Date,
+    required: true
   },
-  supplierInvoiceSerialNumber: {
+  referenceNo: {
     type: String,
     default: ""
   },
@@ -30,13 +33,13 @@ const purchaseSchema = new mongoose.Schema({
       ref: 'Product',
       required: true
     },
-    productName: {
+    name: {
       type: String,
       required: true
     },
     unit: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Unit'
+      type: String,
+      required: false
     },
     quantity: {
       type: Number,
@@ -54,7 +57,16 @@ const purchaseSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
-    discountValue: {
+    tax_group_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TaxGroup'
+    },
+    discount_type: {
+      type: String,
+      enum: ['Fixed', 'Percentage'],
+      default: 'Fixed'
+    },
+    discount_value: {
       type: Number,
       default: 0
     },
@@ -65,13 +77,13 @@ const purchaseSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['DRAFT', 'PENDING', 'PAID', 'CANCELLED'],
-    default: 'DRAFT'
+    enum: ['pending', 'completed', 'cancelled', 'partially_paid', 'paid'],
+    default: 'pending'
   },
   paymentMode: {
     type: String,
     enum: ['CASH', 'CREDIT', 'CHECK', 'BANK_TRANSFER', 'OTHER'],
-    required: true
+    required: false
   },
   taxableAmount: {
     type: Number,
@@ -81,7 +93,7 @@ const purchaseSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  vat: {
+  totalTax: {
     type: Number,
     default: 0
   },
@@ -93,11 +105,11 @@ const purchaseSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  discountType: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Discount'
+  paidAmount: {
+    type: Number,
+    default: 0
   },
-  discount: {
+  balanceAmount: {
     type: Number,
     default: 0
   },
@@ -107,16 +119,6 @@ const purchaseSchema = new mongoose.Schema({
   },
   notes: String,
   termsAndCondition: String,
-  sign_type: {
-    type: String,
-    enum: ['digitalSignature', 'manualSignature', 'none'],
-    default: 'none'
-  },
-  signatureId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Signature'
-  },
-  signatureImage: String,
   isDeleted: {
     type: Boolean,
     default: false
@@ -127,18 +129,14 @@ const purchaseSchema = new mongoose.Schema({
     required: true
   },
   billFrom: {
-    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+    type: mongoose.Schema.Types.ObjectId,
     required: true
   },
   billTo: {
-    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
+    type: mongoose.Schema.Types.ObjectId,
     required: true
-  },
-  purchaseNo: {
-    type: String,
-    unique: true
   }
 }, {
   timestamps: true
@@ -146,10 +144,10 @@ const purchaseSchema = new mongoose.Schema({
 
 // Pre-save hook to generate purchase ID
 purchaseSchema.pre('save', async function (next) {
-  if (!this.purchaseNo) {
+  if (!this.purchaseId) {
     try {
       const count = await this.constructor.countDocuments();
-      this.purchaseNo = `PUR-${String(count + 1).padStart(6, '0')}`;
+      this.purchaseId = `PUR-${String(count + 1).padStart(6, '0')}`;
       next();
     } catch (err) {
       next(err);
@@ -157,28 +155,6 @@ purchaseSchema.pre('save', async function (next) {
   } else {
     next();
   }
-});
-
-// Add validation based on sign_type
-purchaseSchema.pre('validate', function (next) {
-  if (this.sign_type === 'manualSignature' && !this.signatureImage) {
-    this.invalidate('signatureImage', 'Signature image is required for manual signature');
-  }
-  if (this.sign_type === 'digitalSignature' && !this.signatureId) {
-    this.invalidate('signatureId', 'Signature ID is required for digital signature');
-  }
-
-  // Clear unused signature fields
-  if (this.sign_type === 'none') {
-    this.signatureId = undefined;
-    this.signatureImage = undefined;
-  } else if (this.sign_type === 'manualSignature') {
-    this.signatureId = undefined;
-  } else if (this.sign_type === 'digitalSignature') {
-    this.signatureImage = undefined;
-  }
-
-  next();
 });
 
 module.exports = mongoose.model('Purchase', purchaseSchema);
