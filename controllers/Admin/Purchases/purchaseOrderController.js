@@ -728,7 +728,6 @@ const getPurchaseOrderById = async (req, res) => {
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
-                success: false,
                 message: 'Invalid purchase order ID format'
             });
         }
@@ -740,58 +739,50 @@ const getPurchaseOrderById = async (req, res) => {
         })
         .populate('vendorId', 'firstName lastName email phone address')
         .populate('signatureId', 'signatureName signatureImage')
+        .populate('billFrom', 'firstName lastName email phone address profileImage')
+        .populate('billTo', 'firstName lastName email phone address profileImage')
         .populate({
             path: 'bank',
             model: 'BankDetail',
             select: 'bankName accountNumber IFSCCode accountHoldername branchName'
-        })
-        // .populate('items.productId', 'product_name product_code price stock image_url')
-        // .populate('items.unit', 'unit_name');
+        });
 
         if (!purchaseOrder) {
             return res.status(404).json({
-                success: false,
                 message: 'Purchase order not found'
             });
         }
 
-        // Format items
-        const formattedItems = purchaseOrder.items.map(item => ({
-            id: item._id,
-            name: item.name,
-            key: item.key,
-            product: item.productId ? {
-                id: item.productId._id,
-                name: item.productId.product_name,
-                code: item.productId.product_code,
-                price: item.productId.price,
-                stock: item.productId.stock,
-                image: item.productId.image_url
-            } : null,
-            quantity: item.quantity,
-            units: item.units,
-            unit: item.unit ? {
-                id: item.unit._id,
-                name: item.unit.unit_name
-            } : null,
-            rate: item.rate,
-            discount: item.discount,
-            tax: item.tax,
-            taxInfo: item.taxInfo,
-            amount: item.amount,
-            discountType: item.discountType,
-            isRateFormUpdated: item.isRateFormUpdated,
-            form_updated_discounttype: item.form_updated_discounttype,
-            form_updated_discount: item.form_updated_discount,
-            form_updated_rate: item.form_updated_rate,
-            form_updated_tax: item.form_updated_tax
-        }));
+        // Format dates as "dd, MMM yyyy"
+        const formatDate = (date) => {
+            if (!date) return null;
+            const d = new Date(date);
+            const day = d.getDate().toString().padStart(2, '0');
+            const month = d.toLocaleString('default', { month: 'short' });
+            const year = d.getFullYear();
+            return `${day}, ${month} ${year}`;
+        };
+
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+
+        // Format billFrom and billTo details
+        const formatUserDetails = (user) => {
+            if (!user) return null;
+            return {
+                id: user._id,
+                name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+                email: user.email || null,
+                phone: user.phone || null,
+                address: user.address || null,
+                profileImage: user.profileImage 
+                    ? `${baseUrl}${user.profileImage.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
+            };
+        };
 
         // Format signature based on sign_type
-        const baseUrl = `${req.protocol}://${req.get('host')}/`;
         let signature = null;
-
-        if (purchaseOrder.sign_type === 'manualSignature') {
+        if (purchaseOrder.sign_type === 'eSignature') {
             signature = {
                 name: purchaseOrder.signatureName,
                 image: purchaseOrder.signatureImage 
@@ -808,18 +799,46 @@ const getPurchaseOrderById = async (req, res) => {
             };
         }
 
+        // Format bank details
+        const bankDetails = purchaseOrder.bank ? {
+            id: purchaseOrder.bank._id,
+            bankName: purchaseOrder.bank.bankName,
+            accountNumber: purchaseOrder.bank.accountNumber,
+            accountHolderName: purchaseOrder.bank.accountHoldername,
+            branchName: purchaseOrder.bank.branchName,
+            ifscCode: purchaseOrder.bank.IFSCCode
+        } : null;
+
+        // Format vendor details
+        const vendorDetails = purchaseOrder.vendorId ? {
+            id: purchaseOrder.vendorId._id,
+            name: `${purchaseOrder.vendorId.firstName || ''} ${purchaseOrder.vendorId.lastName || ''}`.trim(),
+            email: purchaseOrder.vendorId.email,
+            phone: purchaseOrder.vendorId.phone,
+            address: purchaseOrder.vendorId.address
+        } : null;
+
+        // Format items
+        const formattedItems = purchaseOrder.items.map(item => ({
+            id: item.id,
+            name: item.name,
+            unit: item.unit,
+            qty: item.qty,
+            rate: item.rate,
+            discount: item.discount,
+            tax: item.tax,
+            tax_group_id: item.tax_group_id,
+            discount_type: item.discount_type,
+            discount_value: item.discount_value,
+            amount: item.amount
+        }));
+
         const responseData = {
             id: purchaseOrder._id,
             purchaseOrderId: purchaseOrder.purchaseOrderId,
-            vendor: purchaseOrder.vendorId ? {
-                id: purchaseOrder.vendorId._id,
-                name: `${purchaseOrder.vendorId.firstName} ${purchaseOrder.vendorId.lastName}`,
-                email: purchaseOrder.vendorId.email,
-                phone: purchaseOrder.vendorId.phone,
-                address: purchaseOrder.vendorId.address
-            } : null,
-            purchaseOrderDate: purchaseOrder.purchaseOrderDate,
-            dueDate: purchaseOrder.dueDate,
+            vendor: vendorDetails,
+            purchaseOrderDate: formatDate(purchaseOrder.purchaseOrderDate),
+            dueDate: formatDate(purchaseOrder.dueDate),
             referenceNo: purchaseOrder.referenceNo,
             status: purchaseOrder.status,
             paymentMode: purchaseOrder.paymentMode,
@@ -828,36 +847,27 @@ const getPurchaseOrderById = async (req, res) => {
             vat: purchaseOrder.vat,
             roundOff: purchaseOrder.roundOff,
             TotalAmount: purchaseOrder.TotalAmount,
-            items: purchaseOrder.items ?? [],
-            billFrom: purchaseOrder.billFrom,
-            billTo: purchaseOrder.billTo,
+            items: formattedItems,
+            billFrom: formatUserDetails(purchaseOrder.billFrom),
+            billTo: formatUserDetails(purchaseOrder.billTo),
             notes: purchaseOrder.notes,
             termsAndCondition: purchaseOrder.termsAndCondition,
             sign_type: purchaseOrder.sign_type,
             signature: signature,
-            bank: purchaseOrder.bank ? {
-                id: purchaseOrder.bank._id,
-                bankName: purchaseOrder.bank.bankName,
-                accountNumber: purchaseOrder.bank.accountNumber,
-                accountHolderName: purchaseOrder.bank.accountHoldername,
-                branchName: purchaseOrder.bank.branchName,
-                ifscCode: purchaseOrder.bank.IFSCCode
-            } : null,
+            bank: bankDetails,
             convert_type: purchaseOrder.convert_type,
-            createdAt: purchaseOrder.createdAt,
-            updatedAt: purchaseOrder.updatedAt
+            createdAt: formatDate(purchaseOrder.createdAt),
+            updatedAt: formatDate(purchaseOrder.updatedAt)
         };
 
-        res.status(200).json({
-            success: true,
+        res.status(200).json({ 
             message: 'Purchase order retrieved successfully',
             data: responseData
         });
 
     } catch (err) {
-        console.error('Get purchase order error:', err);
-        res.status(500).json({
-            success: false,
+        console.error(err);
+        res.status(500).json({ 
             message: 'Error fetching purchase order',
             error: err.message
         });
