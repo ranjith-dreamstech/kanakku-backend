@@ -21,9 +21,10 @@ const createPurchaseOrder = async (req, res) => {
             termsAndCondition,
             sign_type,
             signatureId,
+            signatureName,
             userId,
-            billFrom,  // This will now be the user ID whose address we'll use
-            billTo,    // This will now be the user ID whose address we'll use
+            billFrom,
+            billTo,
             convert_type
         } = req.body;
 
@@ -57,6 +58,22 @@ const createPurchaseOrder = async (req, res) => {
             const product = await Product.findById(item.id);
             if (!product) {
                 return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
+            }
+        }
+
+        // Validate signature type
+        const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
+        if (sign_type && !validSignatureTypes.includes(sign_type)) {
+            return res.status(400).json({ message: 'Invalid signature type' });
+        }
+
+        // Validate signature data if eSignature is selected
+        if (sign_type === 'eSignature') {
+            if (!req.file) {
+                return res.status(400).json({ message: 'Signature image is required for eSignature' });
+            }
+            if (!signatureName) {
+                return res.status(400).json({ message: 'Signature name is required for eSignature' });
             }
         }
 
@@ -99,7 +116,8 @@ const createPurchaseOrder = async (req, res) => {
             termsAndCondition: termsAndCondition || '',
             sign_type: sign_type || 'none',
             signatureId: signatureId || null,
-            signatureImage: req.file ? req.file.path : null,
+            signatureImage: sign_type === 'eSignature' ? req.file.path : null,
+            signatureName: sign_type === 'eSignature' ? signatureName : null,
             userId,
             billFrom: billFrom,
             billTo: billTo,
@@ -124,6 +142,8 @@ const createPurchaseOrder = async (req, res) => {
                     TotalAmount: purchaseOrder.TotalAmount,
                     billFrom: purchaseOrder.billFrom,
                     billTo: purchaseOrder.billTo,
+                    sign_type: purchaseOrder.sign_type,
+                    signatureName: purchaseOrder.signatureName,
                     items: purchaseOrder.items.map(item => ({
                         name: item.name,
                         quantity: item.quantity,
@@ -576,47 +596,63 @@ const listPurchaseOrders = async (req, res) => {
         const purchaseOrders = await PurchaseOrder.find(query)
             .populate('vendorId', 'firstName lastName email phone')
             .populate('signatureId', 'signatureName')
-            .populate('bank', 'bankName accountNumber')
+            .populate({
+                path: 'bank',
+                model: 'BankDetail', // Changed from 'Bank' to 'BankDetail'
+                select: 'bankName accountNumber accountHoldername IFSCCode'
+            })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(parseInt(limit));
 
-        // Format response
-        const formattedOrders = purchaseOrders.map(order => ({
-            id: order._id,
-            purchaseOrderId: order.purchaseOrderId,
-            vendor: order.vendorId ? {
-                id: order.vendorId._id,
-                name: `${order.vendorId.firstName} ${order.vendorId.lastName}`,
-                email: order.vendorId.email,
-                phone: order.vendorId.phone
-            } : null,
-            purchaseOrderDate: order.purchaseOrderDate,
-            dueDate: order.dueDate,
-            referenceNo: order.referenceNo,
-            status: order.status,
-            paymentMode: order.paymentMode,
-            taxableAmount: order.taxableAmount,
-            totalDiscount: order.totalDiscount,
-            vat: order.vat,
-            TotalAmount: order.TotalAmount,
-            itemsCount: order.items.length,
-            billFrom: order.billFrom,
-            billTo: order.billTo,
-            notes: order.notes,
-            signature: order.signatureId ? {
-                id: order.signatureId._id,
-                name: order.signatureId.signatureName
-            } : null,
-            bank: order.bank ? {
-                id: order.bank._id,
-                name: order.bank.bankName,
-                accountNumber: order.bank.accountNumber
-            } : null,
-            convert_type: order.convert_type,
-            createdAt: order.createdAt,
-            updatedAt: order.updatedAt
-        }));
+        const formattedOrders = purchaseOrders.map(order => {
+            const baseUrl = `${req.protocol}://${req.get('host')}/`;
+            const signatureImage = order.signatureImage 
+                ? `${baseUrl}${order.signatureImage.replace(/\\/g, '/')}`
+                : null;
+
+            return {
+                id: order._id,
+                purchaseOrderId: order.purchaseOrderId,
+                vendor: order.vendorId ? {
+                    id: order.vendorId._id,
+                    name: `${order.vendorId.firstName} ${order.vendorId.lastName}`,
+                    email: order.vendorId.email,
+                    phone: order.vendorId.phone
+                } : null,
+                purchaseOrderDate: order.purchaseOrderDate,
+                dueDate: order.dueDate,
+                referenceNo: order.referenceNo,
+                status: order.status,
+                paymentMode: order.paymentMode,
+                taxableAmount: order.taxableAmount,
+                totalDiscount: order.totalDiscount,
+                vat: order.vat,
+                TotalAmount: order.TotalAmount,
+                itemsCount: order.items.length,
+                billFrom: order.billFrom,
+                billTo: order.billTo,
+                notes: order.notes,
+                sign_type: order.sign_type,
+                signature: order.sign_type === 'eSignature' ? {
+                    name: order.signatureName,
+                    image: signatureImage
+                } : order.signatureId ? {
+                    id: order.signatureId?._id,
+                    name: order.signatureId?.signatureName
+                } : null,
+                bank: order.bank ? {
+                    id: order.bank._id,
+                    name: order.bank.bankName,
+                    accountNumber: order.bank.accountNumber,
+                    accountHolderName: order.bank.accountHoldername,
+                    ifscCode: order.bank.IFSCCode
+                } : null,
+                convert_type: order.convert_type,
+                createdAt: order.createdAt,
+                updatedAt: order.updatedAt
+            };
+        });
 
         res.status(200).json({
             success: true,
@@ -661,7 +697,11 @@ const getPurchaseOrderById = async (req, res) => {
         })
         .populate('vendorId', 'firstName lastName email phone address')
         .populate('signatureId', 'signatureName signatureImage')
-        .populate('bank', 'bankName accountNumber IFSCCode')
+        .populate({
+            path: 'bank',
+            model: 'BankDetail',
+            select: 'bankName accountNumber IFSCCode accountHoldername branchName'
+        })
         .populate('items.productId', 'product_name product_code price stock image_url')
         .populate('items.unit', 'unit_name');
 
@@ -696,14 +736,34 @@ const getPurchaseOrderById = async (req, res) => {
             tax: item.tax,
             taxInfo: item.taxInfo,
             amount: item.amount,
-            discountType: item.discountType
+            discountType: item.discountType,
+            isRateFormUpdated: item.isRateFormUpdated,
+            form_updated_discounttype: item.form_updated_discounttype,
+            form_updated_discount: item.form_updated_discount,
+            form_updated_rate: item.form_updated_rate,
+            form_updated_tax: item.form_updated_tax
         }));
 
-        // Format signature image URL
+        // Format signature based on sign_type
         const baseUrl = `${req.protocol}://${req.get('host')}/`;
-        const signatureImage = purchaseOrder.signatureId?.signatureImage 
-            ? `${baseUrl}${purchaseOrder.signatureId.signatureImage.replace(/\\/g, '/')}`
-            : null;
+        let signature = null;
+
+        if (purchaseOrder.sign_type === 'manualSignature') {
+            signature = {
+                name: purchaseOrder.signatureName,
+                image: purchaseOrder.signatureImage 
+                    ? `${baseUrl}${purchaseOrder.signatureImage.replace(/\\/g, '/')}`
+                    : null
+            };
+        } else if (purchaseOrder.sign_type === 'digitalSignature' && purchaseOrder.signatureId) {
+            signature = {
+                id: purchaseOrder.signatureId._id,
+                name: purchaseOrder.signatureId.signatureName,
+                image: purchaseOrder.signatureId.signatureImage 
+                    ? `${baseUrl}${purchaseOrder.signatureId.signatureImage.replace(/\\/g, '/')}`
+                    : null
+            };
+        }
 
         const responseData = {
             id: purchaseOrder._id,
@@ -731,16 +791,14 @@ const getPurchaseOrderById = async (req, res) => {
             notes: purchaseOrder.notes,
             termsAndCondition: purchaseOrder.termsAndCondition,
             sign_type: purchaseOrder.sign_type,
-            signature: purchaseOrder.signatureId ? {
-                id: purchaseOrder.signatureId._id,
-                name: purchaseOrder.signatureId.signatureName,
-                image: signatureImage
-            } : null,
+            signature: signature,
             bank: purchaseOrder.bank ? {
                 id: purchaseOrder.bank._id,
-                name: purchaseOrder.bank.bankName,
+                bankName: purchaseOrder.bank.bankName,
                 accountNumber: purchaseOrder.bank.accountNumber,
-                IFSCCode: purchaseOrder.bank.IFSCCode
+                accountHolderName: purchaseOrder.bank.accountHoldername,
+                branchName: purchaseOrder.bank.branchName,
+                ifscCode: purchaseOrder.bank.IFSCCode
             } : null,
             convert_type: purchaseOrder.convert_type,
             createdAt: purchaseOrder.createdAt,
@@ -758,12 +816,11 @@ const getPurchaseOrderById = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching purchase order',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+            error: err.message
         });
     }
 };
 
-// Update purchase order
 const updatePurchaseOrder = async (req, res) => {
     try {
         const { id } = req.params;
@@ -794,10 +851,37 @@ const updatePurchaseOrder = async (req, res) => {
         // Validate vendor if provided
         if (updates.vendorId) {
             const vendor = await User.findById(updates.vendorId);
-            if (!vendor || vendor.user_type !== 2) {
+            if (!vendor) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Invalid vendor ID or vendor is not a supplier'
+                    message: 'Invalid vendor ID'
+                });
+            }
+        }
+
+        // Validate signature type if provided
+        if (updates.sign_type) {
+            const validSignatureTypes = ['none', 'digitalSignature', 'manualSignature'];
+            if (!validSignatureTypes.includes(updates.sign_type)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid signature type'
+                });
+            }
+        }
+
+        // Validate manual signature data if provided
+        if (updates.sign_type === 'manualSignature') {
+            if (!req.file && !existingOrder.signatureImage) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Signature image is required for manual signature'
+                });
+            }
+            if (!updates.signatureName && !existingOrder.signatureName) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Signature name is required for manual signature'
                 });
             }
         }
@@ -841,9 +925,27 @@ const updatePurchaseOrder = async (req, res) => {
             updates.TotalAmount = totalAmount;
         }
 
-        // Handle signature image upload
+        // Handle signature updates
         if (req.file) {
             updates.signatureImage = req.file.path;
+            
+            // If updating to manualSignature, ensure we have a name
+            if (updates.sign_type === 'manualSignature' && !updates.signatureName) {
+                updates.signatureName = existingOrder.signatureName || 'Untitled Signature';
+            }
+        }
+
+        // If changing to digitalSignature, clear manual signature fields
+        if (updates.sign_type === 'digitalSignature') {
+            updates.signatureName = null;
+            updates.signatureImage = null;
+        }
+
+        // If changing to none, clear all signature fields
+        if (updates.sign_type === 'none') {
+            updates.signatureName = null;
+            updates.signatureImage = null;
+            updates.signatureId = null;
         }
 
         // Remove protected fields
@@ -860,8 +962,33 @@ const updatePurchaseOrder = async (req, res) => {
             }
         )
         .populate('vendorId', 'firstName lastName email phone')
-        .populate('signatureId', 'signatureName')
-        .populate('bank', 'bankName accountNumber');
+        .populate('signatureId', 'signatureName signatureImage')
+        .populate({
+            path: 'bank',
+            model: 'BankDetail',
+            select: 'bankName accountNumber IFSCCode accountHoldername'
+        });
+
+        // Format signature for response
+        let signature = null;
+        if (updatedOrder.sign_type === 'manualSignature') {
+            const baseUrl = `${req.protocol}://${req.get('host')}/`;
+            signature = {
+                name: updatedOrder.signatureName,
+                image: updatedOrder.signatureImage 
+                    ? `${baseUrl}${updatedOrder.signatureImage.replace(/\\/g, '/')}`
+                    : null
+            };
+        } else if (updatedOrder.sign_type === 'digitalSignature' && updatedOrder.signatureId) {
+            const baseUrl = `${req.protocol}://${req.get('host')}/`;
+            signature = {
+                id: updatedOrder.signatureId._id,
+                name: updatedOrder.signatureId.signatureName,
+                image: updatedOrder.signatureId.signatureImage 
+                    ? `${baseUrl}${updatedOrder.signatureId.signatureImage.replace(/\\/g, '/')}`
+                    : null
+            };
+        }
 
         res.status(200).json({
             success: true,
@@ -875,6 +1002,15 @@ const updatePurchaseOrder = async (req, res) => {
                 } : null,
                 status: updatedOrder.status,
                 TotalAmount: updatedOrder.TotalAmount,
+                sign_type: updatedOrder.sign_type,
+                signature: signature,
+                bank: updatedOrder.bank ? {
+                    id: updatedOrder.bank._id,
+                    bankName: updatedOrder.bank.bankName,
+                    accountNumber: updatedOrder.bank.accountNumber,
+                    accountHolderName: updatedOrder.bank.accountHoldername,
+                    ifscCode: updatedOrder.bank.IFSCCode
+                } : null,
                 updatedAt: updatedOrder.updatedAt
             }
         });
@@ -884,7 +1020,7 @@ const updatePurchaseOrder = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error updating purchase order',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+            error: err.message
         });
     }
 };
@@ -893,49 +1029,87 @@ const updatePurchaseOrder = async (req, res) => {
 const deletePurchaseOrder = async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user;
+        const userId = req.user; // Assuming user ID is available in req.user
 
+        // Validate ID format
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid purchase order ID format'
+                message: 'Invalid purchase order ID format',
+                error: 'INVALID_ID_FORMAT'
             });
         }
 
-        // Check if purchase order exists and belongs to user
+        // Check if purchase order exists, belongs to user, and isn't deleted
         const purchaseOrder = await PurchaseOrder.findOne({ 
-            _id: id, 
-            userId, 
+            _id: id,
+            userId: userId, // Ensure the PO belongs to the requesting user
             isDeleted: false 
         });
 
         if (!purchaseOrder) {
             return res.status(404).json({
                 success: false,
-                message: 'Purchase order not found'
+                message: 'Purchase order not found or already deleted',
+                error: 'PO_NOT_FOUND'
             });
         }
 
-        // Soft delete the purchase order
-        await PurchaseOrder.findByIdAndUpdate(id, { 
-            isDeleted: true 
-        });
+        // Additional validation - check if PO can be deleted based on status
+        if (purchaseOrder.status === 'COMPLETED' || purchaseOrder.status === 'PAID') {
+            return res.status(403).json({
+                success: false,
+                message: 'Cannot delete a completed or paid purchase order',
+                error: 'INVALID_PO_STATUS'
+            });
+        }
+
+        // Soft delete with additional audit info
+        const deletedPO = await PurchaseOrder.findByIdAndUpdate(
+            id,
+            { 
+                isDeleted: true,
+                deletedAt: new Date(),
+                deletedBy: userId
+            },
+            { new: true }
+        );
+
+        if (!deletedPO) {
+            return res.status(404).json({
+                success: false,
+                message: 'Purchase order not found after deletion attempt',
+                error: 'DELETE_FAILED'
+            });
+        }
 
         res.status(200).json({
             success: true,
             message: 'Purchase order deleted successfully',
             data: {
-                id: purchaseOrder._id,
-                purchaseOrderId: purchaseOrder.purchaseOrderId
+                id: deletedPO._id,
+                purchaseOrderId: deletedPO.purchaseOrderId,
+                deletedAt: deletedPO.deletedAt
             }
         });
 
     } catch (err) {
         console.error('Delete purchase order error:', err);
+        
+        // Handle specific mongoose errors
+        if (err.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid purchase order ID',
+                error: 'INVALID_ID'
+            });
+        }
+
         res.status(500).json({
             success: false,
             message: 'Error deleting purchase order',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+            error: process.env.NODE_ENV === 'development' ? err.message : 'INTERNAL_SERVER_ERROR',
+            errorCode: 'SERVER_ERROR'
         });
     }
 };
