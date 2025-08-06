@@ -720,6 +720,46 @@ const listPurchaseOrders = async (req, res) => {
     }
 };
 
+const listPurchaseOrdersMinimal = async (req, res) => {
+    try {
+        const { search = '' } = req.query;
+        const userId = req.user;
+
+        // Build query
+        const query = { 
+            userId, 
+            isDeleted: false 
+        };
+
+        // Add search filter
+        if (search) {
+            query.purchaseOrderId = { $regex: search, $options: 'i' };
+        }
+
+        // Get purchase orders (only id and purchaseOrderId fields)
+        const purchaseOrders = await PurchaseOrder.find(query)
+            .select('_id purchaseOrderId') // Only these fields
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase orders retrieved successfully',
+            data: purchaseOrders.map(order => ({
+                id: order._id,
+                purchaseOrderId: order.purchaseOrderId
+            }))
+        });
+
+    } catch (err) {
+        console.error('List minimal purchase orders error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching purchase orders',
+            error: err.message
+        });
+    }
+};
+
 // Get purchase order by ID
 const getPurchaseOrderById = async (req, res) => {
     try {
@@ -1215,6 +1255,7 @@ module.exports = {
     getUserById,
     getRecentProductsWithSearch,
     listBankDetails,
+    listPurchaseOrdersMinimal,
     getUserSignatures,
     listPurchaseOrders,
     getPurchaseOrderById,

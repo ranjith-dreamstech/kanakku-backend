@@ -118,6 +118,8 @@ router.get('/purchase-orders', protect, purchaseOrderController.listPurchaseOrde
 router.get('/purchase-orders/:id', protect, purchaseOrderController.getPurchaseOrderById);
 router.put('/purchase-orders/:id', protect, upload.single('signatureImage'), updatePurchaseOrderValidator, purchaseOrderController.updatePurchaseOrder);
 router.delete('/purchase-orders/:id', protect, purchaseOrderController.deletePurchaseOrder);
+router.get('/purchase-minimal', protect, purchaseOrderController.listPurchaseOrdersMinimal);
+
 
 // Helper routes for purchase order creation
 router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType);
