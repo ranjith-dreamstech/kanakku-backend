@@ -596,7 +596,7 @@ const listPurchaseOrders = async (req, res) => {
         const purchaseOrders = await PurchaseOrder.find(query)
             .populate('vendorId', 'firstName lastName email phone')
             .populate('signatureId', 'signatureName')
-            .populate('billTo', 'firstName lastName email profileImage')
+            .populate('billTo', 'firstName lastName email profileImage phone')
             .populate({
                 path: 'bank',
                 model: 'BankDetail',
@@ -622,28 +622,47 @@ const listPurchaseOrders = async (req, res) => {
                 return `${day}, ${month} ${year}`;
             };
 
-            // Get billTo user details - fixed to properly check billTo
-            let billToDetails = null;
-            if (order.billTo) {
-                billToDetails = {
-                    id: order.billTo._id,
-                    name: `${order.billTo.firstName || ''} ${order.billTo.lastName || ''}`.trim(),
-                    email: order.billTo.email,
-                    profileImage: order.billTo.profileImage 
-                        ? `${baseUrl}${order.billTo.profileImage.replace(/\\/g, '/')}`
-                        : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
-                };
-            }
+            // Vendor details
+            const vendorDetails = order.vendorId ? {
+                id: order.vendorId._id,
+                name: `${order.vendorId.firstName || ''} ${order.vendorId.lastName || ''}`.trim(),
+                email: order.vendorId.email || null,
+                phone: order.vendorId.phone || null
+            } : null;
+
+            // BillTo details (consistent with vendor structure)
+            const billToDetails = order.billTo ? {
+                id: order.billTo._id,
+                name: `${order.billTo.firstName || ''} ${order.billTo.lastName || ''}`.trim(),
+                email: order.billTo.email || null,
+                phone: order.billTo.phone || null,
+                profileImage: order.billTo.profileImage 
+                    ? `${baseUrl}${order.billTo.profileImage.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
+            } : null;
+
+            // Bank details
+            const bankDetails = order.bank ? {
+                id: order.bank._id,
+                name: order.bank.bankName || null,
+                accountNumber: order.bank.accountNumber || null,
+                accountHolderName: order.bank.accountHoldername || null,
+                ifscCode: order.bank.IFSCCode || null
+            } : null;
+
+            // Signature details
+            const signatureDetails = order.sign_type === 'eSignature' ? {
+                name: order.signatureName || null,
+                image: signatureImage
+            } : order.signatureId ? {
+                id: order.signatureId._id,
+                name: order.signatureId.signatureName || null
+            } : null;
 
             return {
                 id: order._id,
                 purchaseOrderId: order.purchaseOrderId,
-                vendor: order.vendorId ? {
-                    id: order.vendorId._id,
-                    name: `${order.vendorId.firstName} ${order.vendorId.lastName}`,
-                    email: order.vendorId.email,
-                    phone: order.vendorId.phone
-                } : null,
+                vendor: vendorDetails,
                 purchaseOrderDate: formatDate(order.purchaseOrderDate),
                 dueDate: formatDate(order.dueDate),
                 referenceNo: order.referenceNo,
@@ -658,20 +677,8 @@ const listPurchaseOrders = async (req, res) => {
                 billTo: billToDetails,
                 notes: order.notes,
                 sign_type: order.sign_type,
-                signature: order.sign_type === 'eSignature' ? {
-                    name: order.signatureName,
-                    image: signatureImage
-                } : order.signatureId ? {
-                    id: order.signatureId?._id,
-                    name: order.signatureId?.signatureName
-                } : null,
-                bank: order.bank ? {
-                    id: order.bank._id,
-                    name: order.bank.bankName,
-                    accountNumber: order.bank.accountNumber,
-                    accountHolderName: order.bank.accountHoldername,
-                    ifscCode: order.bank.IFSCCode
-                } : null,
+                signature: signatureDetails,
+                bank: bankDetails,
                 convert_type: order.convert_type,
                 createdAt: formatDate(order.createdAt),
                 updatedAt: formatDate(order.updatedAt)
