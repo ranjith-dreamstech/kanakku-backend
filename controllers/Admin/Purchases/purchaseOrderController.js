@@ -590,13 +590,13 @@ const listPurchaseOrders = async (req, res) => {
         }
 
         // Get total count
-        const totalCount = await PurchaseOrder.countDocuments(query);
+        const total = await PurchaseOrder.countDocuments(query);
 
         // Get purchase orders with pagination
         const purchaseOrders = await PurchaseOrder.find(query)
             .populate('vendorId', 'firstName lastName email phone')
             .populate('signatureId', 'signatureName')
-            .populate('billTo', 'firstName lastName email profileImage') // Add population for billTo
+            .populate('billTo', 'firstName lastName email profileImage')
             .populate({
                 path: 'bank',
                 model: 'BankDetail',
@@ -604,7 +604,7 @@ const listPurchaseOrders = async (req, res) => {
             })
             .sort({ createdAt: -1 })
             .skip(skip)
-            .limit(parseInt(limit));
+            .limit(Number(limit));
 
         const formattedOrders = await Promise.all(purchaseOrders.map(async (order) => {
             const baseUrl = `${req.protocol}://${req.get('host')}/`;
@@ -615,7 +615,7 @@ const listPurchaseOrders = async (req, res) => {
             // Format dates
             const formatDate = (date) => {
                 if (!date) return null;
-                return new Date(date).toISOString().split('T')[0]; // YYYY-MM-DD format
+                return new Date(date).toISOString().split('T')[0];
             };
 
             // Get billTo user details
@@ -677,20 +677,20 @@ const listPurchaseOrders = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Purchase orders retrieved successfully',
-            data: formattedOrders,
-            pagination: {
-                currentPage: parseInt(page),
-                totalPages: Math.ceil(totalCount / limit),
-                totalCount,
-                hasNextPage: page * limit < totalCount,
-                hasPrevPage: page > 1
+            data: {
+                purchaseOrders: formattedOrders,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
             }
         });
 
     } catch (err) {
         console.error('List purchase orders error:', err);
         res.status(500).json({
-            success: false,
             message: 'Error fetching purchase orders',
             error: err.message
         });
