@@ -596,20 +596,40 @@ const listPurchaseOrders = async (req, res) => {
         const purchaseOrders = await PurchaseOrder.find(query)
             .populate('vendorId', 'firstName lastName email phone')
             .populate('signatureId', 'signatureName')
+            .populate('billTo', 'firstName lastName email profileImage') // Add population for billTo
             .populate({
                 path: 'bank',
-                model: 'BankDetail', // Changed from 'Bank' to 'BankDetail'
+                model: 'BankDetail',
                 select: 'bankName accountNumber accountHoldername IFSCCode'
             })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(parseInt(limit));
 
-        const formattedOrders = purchaseOrders.map(order => {
+        const formattedOrders = await Promise.all(purchaseOrders.map(async (order) => {
             const baseUrl = `${req.protocol}://${req.get('host')}/`;
             const signatureImage = order.signatureImage 
                 ? `${baseUrl}${order.signatureImage.replace(/\\/g, '/')}`
                 : null;
+
+            // Format dates
+            const formatDate = (date) => {
+                if (!date) return null;
+                return new Date(date).toISOString().split('T')[0]; // YYYY-MM-DD format
+            };
+
+            // Get billTo user details
+            let billToDetails = null;
+            if (order.billTo && order.billTo._id) {
+                billToDetails = {
+                    id: order.billTo._id,
+                    name: `${order.billTo.firstName} ${order.billTo.lastName}`,
+                    email: order.billTo.email,
+                    profileImage: order.billTo.profileImage 
+                        ? `${baseUrl}${order.billTo.profileImage.replace(/\\/g, '/')}`
+                        : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
+                };
+            }
 
             return {
                 id: order._id,
@@ -620,8 +640,8 @@ const listPurchaseOrders = async (req, res) => {
                     email: order.vendorId.email,
                     phone: order.vendorId.phone
                 } : null,
-                purchaseOrderDate: order.purchaseOrderDate,
-                dueDate: order.dueDate,
+                purchaseOrderDate: formatDate(order.purchaseOrderDate),
+                dueDate: formatDate(order.dueDate),
                 referenceNo: order.referenceNo,
                 status: order.status,
                 paymentMode: order.paymentMode,
@@ -631,7 +651,7 @@ const listPurchaseOrders = async (req, res) => {
                 TotalAmount: order.TotalAmount,
                 itemsCount: order.items.length,
                 billFrom: order.billFrom,
-                billTo: order.billTo,
+                billTo: billToDetails,
                 notes: order.notes,
                 sign_type: order.sign_type,
                 signature: order.sign_type === 'eSignature' ? {
@@ -649,10 +669,10 @@ const listPurchaseOrders = async (req, res) => {
                     ifscCode: order.bank.IFSCCode
                 } : null,
                 convert_type: order.convert_type,
-                createdAt: order.createdAt,
-                updatedAt: order.updatedAt
+                createdAt: formatDate(order.createdAt),
+                updatedAt: formatDate(order.updatedAt)
             };
-        });
+        }));
 
         res.status(200).json({
             success: true,
