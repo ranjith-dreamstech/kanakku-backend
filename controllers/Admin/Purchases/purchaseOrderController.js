@@ -5,6 +5,7 @@ const Product = require('@models/Product');
 const BankDetail = require('@models/BankDetail');
 const Signature = require('@models/Signature');
 const TaxGroup = require('@models/TaxGroup');
+const { response } = require('express');
 
 // Create a new purchase order
 const createPurchaseOrder = async (req, res) => {
@@ -605,7 +606,6 @@ const listPurchaseOrders = async (req, res) => {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(Number(limit));
-
         const formattedOrders = await Promise.all(purchaseOrders.map(async (order) => {
             const baseUrl = `${req.protocol}://${req.get('host')}/`;
             const signatureImage = order.signatureImage 
