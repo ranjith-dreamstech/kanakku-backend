@@ -745,8 +745,8 @@ const getPurchaseOrderById = async (req, res) => {
             model: 'BankDetail',
             select: 'bankName accountNumber IFSCCode accountHoldername branchName'
         })
-        .populate('items.productId', 'product_name product_code price stock image_url')
-        .populate('items.unit', 'unit_name');
+        // .populate('items.productId', 'product_name product_code price stock image_url')
+        // .populate('items.unit', 'unit_name');
 
         if (!purchaseOrder) {
             return res.status(404).json({
@@ -828,7 +828,7 @@ const getPurchaseOrderById = async (req, res) => {
             vat: purchaseOrder.vat,
             roundOff: purchaseOrder.roundOff,
             TotalAmount: purchaseOrder.TotalAmount,
-            items: formattedItems,
+            items: purchaseOrder.items ?? [],
             billFrom: purchaseOrder.billFrom,
             billTo: purchaseOrder.billTo,
             notes: purchaseOrder.notes,
