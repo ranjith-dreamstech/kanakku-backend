@@ -32,22 +32,22 @@ const createPurchase = async (req, res) => {
     } = req.body;
 
     // Validate purchase order exists
-    const purchaseOrder = await PurchaseOrder.findOne({ purchaseOrderId });
-    if (!purchaseOrder) {
-      return res.status(400).json({ message: 'Invalid purchase order ID' });
-    }
+    // const purchaseOrder = await PurchaseOrder.findOne({ purchaseOrderId });
+    // if (!purchaseOrder) {
+    //   return res.status(400).json({ message: 'Invalid purchase order ID' });
+    // }
 
     // Validate vendor exists and is a supplier
-    const vendor = await User.findById(vendorId);
-    if (!vendor || vendor.user_type !== 'supplier') {
-      return res.status(400).json({ message: 'Invalid vendor ID or vendor is not a supplier' });
-    }
+    // const vendor = await User.findById(vendorId);
+    // if (!vendor || vendor.user_type !== 'supplier') {
+    //   return res.status(400).json({ message: 'Invalid vendor ID or vendor is not a supplier' });
+    // }
 
     // Validate requesting user exists
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(422).json({ message: 'Invalid user ID' });
-    }
+    // const user = await User.findById(userId);
+    // if (!user) {
+    //   return res.status(422).json({ message: 'Invalid user ID' });
+    // }
 
     // Validate bill from and bill to users
     const billFromUser = await User.findById(billFrom);
