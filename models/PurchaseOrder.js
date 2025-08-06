@@ -117,6 +117,7 @@ const purchaseOrderSchema = new mongoose.Schema({
     ref: 'Signature'
   },
   signatureImage: String,
+  signatureName: String,
   isDeleted: {
     type: Boolean,
     default: false
