@@ -133,6 +133,8 @@ router.put('/signatures/:signatureId', protect, upload.single('signatureImage'),
 router.delete('/signatures/:signatureId', protect, SignatureController.deleteSignature);
 router.patch('/signatures/set-default/:signatureId', protect, SignatureController.setAsDefaultSignature);
 router.patch('/signatures/status/:signatureId', protect, SignatureController.updateSignatureStatus);
+router.post('/paymentmode', protect, SignatureController.createPaymentMode);
+router.get('/paymentmode', protect, SignatureController.listPaymentModes);
 //bankDetails
 router.post('/bank-accounts', protect, createBankDetailValidator, BankDetailController.createBankDetail);
 router.get('/bank-accounts', protect, BankDetailController.listBankDetails);

@@ -1,5 +1,6 @@
 const Signature = require('@models/Signature');
 const User = require('@models/User');
+const PaymentMode = require('@models/PaymentMode');
 const fs = require('fs');
 const path = require('path');
 
@@ -438,6 +439,70 @@ const updateSignatureStatus = async (req, res) => {
     }
 };
 
+const createPaymentMode = async (req, res) => {
+    try {
+        const { name } = req.body;
+        
+        // Check if payment mode with this name already exists
+        const existingPaymentMode = await PaymentMode.findOne({ name });
+        if (existingPaymentMode) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Payment mode with this name already exists' 
+            });
+        }
+
+        // Create new payment mode
+        const paymentMode = new PaymentMode({
+            name
+        });
+
+        await paymentMode.save();
+
+        res.status(201).json({ 
+            success: true,
+            message: 'Payment mode created successfully', 
+            data: {
+                id: paymentMode._id,
+                name: paymentMode.name,
+                createdAt: paymentMode.createdAt,
+                updatedAt: paymentMode.updatedAt
+            }
+        });
+    } catch (err) {
+        console.error('Payment mode creation error:', err);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error creating payment mode',
+            error: err.message 
+        });
+    }
+};
+const listPaymentModes = async (req, res) => {
+  try {
+    const paymentModes = await PaymentMode.find({})
+      .sort({ createdAt: -1 }); // Sort by newest first (optional)
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment modes retrieved successfully',
+      data: paymentModes.map(mode => ({
+        id: mode._id,
+        name: mode.name,
+        createdAt: mode.createdAt,
+        updatedAt: mode.updatedAt
+      }))
+    });
+  } catch (err) {
+    console.error('Error fetching payment modes:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving payment modes',
+      error: err.message
+    });
+  }
+};
+
 
 module.exports = {
     createSignature,
@@ -445,5 +510,7 @@ module.exports = {
     updateSignature,
     deleteSignature,
     setAsDefaultSignature,
-    updateSignatureStatus
+    updateSignatureStatus,
+    createPaymentMode,
+    listPaymentModes
 };
