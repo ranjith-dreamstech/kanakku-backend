@@ -153,11 +153,13 @@ const purchaseOrderSchema = new mongoose.Schema({
     required: true
   },
    billFrom: {  
-    type: String,
+    ref: 'User',
+    type: mongoose.Schema.Types.ObjectId,
     required: true
   },
   billTo: {   
-    type: String,
+    ref: 'User',
+    type: mongoose.Schema.Types.ObjectId,
     required: true
   },
   convert_type: {
