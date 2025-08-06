@@ -135,7 +135,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   termsAndCondition: String,
   sign_type: {
     type: String,
-    enum: ['manualSignature', 'digitalSignature', 'none'],
+    enum: ['digitalSignature', 'eSignature', 'none'],
     default: 'none'
   },
   signatureId: {
