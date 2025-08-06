@@ -78,32 +78,41 @@ const createPurchaseOrder = async (req, res) => {
             }
         }
 
-        // Calculate amounts
+        // Calculate amounts based on the items exactly as they are in the payload
         let taxableAmount = 0;
         let totalDiscount = 0;
         let vat = 0;
         let totalAmount = 0;
 
         items.forEach(item => {
-            const itemAmount = item.qty * (item.rate || 0);
+            const itemAmount = item.amount || (item.qty * (item.rate || 0));
             const itemDiscount = item.discount || 0;
             const itemTax = item.tax || 0;
             
             taxableAmount += itemAmount;
             totalDiscount += itemDiscount;
             vat += itemTax;
-            totalAmount += (itemAmount - itemDiscount + itemTax);
+            totalAmount += itemAmount;
         });
 
-        // Create purchase order
+        // Create purchase order with items exactly as in payload
         const purchaseOrder = new PurchaseOrder({
             vendorId,
             purchaseOrderDate: new Date(orderDate),
-            dueDate: new Date(orderDate),
+            dueDate: new Date(dueDate || orderDate),
             referenceNo: referenceNo || '',
             items: items.map(item => ({
-                ...item,
-                amount: item.amount || (item.qty * (item.rate || 0))
+                id: item.id,
+                name: item.name,
+                unit: item.unit,
+                qty: item.qty,
+                rate: item.rate,
+                discount: item.discount,
+                tax: item.tax,
+                tax_group_id: item.tax_group_id,
+                discount_type: item.discount_type,
+                discount_value: item.discount_value,
+                amount: item.amount
             })),
             status: status || 'new',
             paymentMode,
@@ -133,12 +142,8 @@ const createPurchaseOrder = async (req, res) => {
                 purchaseOrder: {
                     id: purchaseOrder._id,
                     purchaseOrderId: purchaseOrder.purchaseOrderId,
-                    // vendor: {
-                    //     id: vendor._id,
-                    //     name: `${vendor.firstName} ${vendor.lastName}`
-                    // },
                     purchaseOrderDate: purchaseOrder.purchaseOrderDate,
-                    dueDate: purchaseOrder.orderDate,
+                    dueDate: purchaseOrder.dueDate,
                     status: purchaseOrder.status,
                     TotalAmount: purchaseOrder.TotalAmount,
                     billFrom: purchaseOrder.billFrom,
@@ -146,9 +151,16 @@ const createPurchaseOrder = async (req, res) => {
                     sign_type: purchaseOrder.sign_type,
                     signatureName: purchaseOrder.signatureName,
                     items: purchaseOrder.items.map(item => ({
+                        id: item.id,
                         name: item.name,
-                        quantity: item.quantity,
+                        unit: item.unit,
+                        qty: item.qty,
                         rate: item.rate,
+                        discount: item.discount,
+                        tax: item.tax,
+                        tax_group_id: item.tax_group_id,
+                        discount_type: item.discount_type,
+                        discount_value: item.discount_value,
                         amount: item.amount
                     }))
                 }
@@ -158,7 +170,7 @@ const createPurchaseOrder = async (req, res) => {
         console.error(err);
         res.status(500).json({ 
             message: 'Error creating purchase order',
-            error: err
+            error: err.message
         });
     }
 };
