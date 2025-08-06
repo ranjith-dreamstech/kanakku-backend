@@ -9,6 +9,7 @@ const TaxGroupController = require('../controllers/TaxGroupController');
 const ProductController = require('../controllers/ProductController');
 const SupplierController = require('@controllers/Admin/Purchases/SupplierController');
 const purchaseOrderController = require('@controllers/Admin/Purchases/purchaseOrderController');
+const purchaseController = require('@controllers/Admin/Purchases/purchaseController');
 const SignatureController = require('../controllers/SignatureController');
 const BankDetailController = require('@controllers/bankDetailController');
 const CompanySettings = require('@controllers/CompanySettingsController');
@@ -25,6 +26,7 @@ const { createProductValidator, updateProductValidator } = require('../validator
 const { updateProfileValidator } = require('../validators/updateProfileValidator');
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const { purchaseOrderValidator, updatePurchaseOrderValidator } = require('../validators/Admin/Purchases/purchaseOrderValidator');
+const  purchaseValidator  = require('../validators/Admin/Purchases/purchaseValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
 const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
@@ -104,6 +106,12 @@ router.get('/suppliers', protect, SupplierController.listSuppliers);
 router.put('/suppliers/:id', protect, upload.single('profileImage'), SupplierController.updateSupplier);
 router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 
+//purchase
+router.post('/purchase', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.createPurchase);
+router.get('/purchase', protect, purchaseController.getAllPurchases);
+router.get('/purchase/:id', protect, purchaseController.getPurchaseById);
+router.put('/purchase/:id', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.updatePurchase);
+router.delete('/purchase/:id', protect, purchaseController.deletePurchase);
 //purchaseOrder
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
 router.get('/purchase-orders', protect, purchaseOrderController.listPurchaseOrders);
