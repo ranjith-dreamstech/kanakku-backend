@@ -26,7 +26,7 @@ const { createProductValidator, updateProductValidator } = require('../validator
 const { updateProfileValidator } = require('../validators/updateProfileValidator');
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const { purchaseOrderValidator, updatePurchaseOrderValidator } = require('../validators/Admin/Purchases/purchaseOrderValidator');
-const  purchaseValidator  = require('../validators/Admin/Purchases/purchaseValidator');
+const  {purchaseValidator } = require('../validators/Admin/Purchases/purchaseValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
 const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
@@ -110,7 +110,6 @@ router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 router.post('/purchases', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.createPurchase);
 router.get('/purchases', protect, purchaseController.getAllPurchases);
 router.get('/purchases/:id', protect, purchaseController.getPurchaseById);
-router.put('/purchases/:id', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.updatePurchase);
 router.delete('/purchases/:id', protect, purchaseController.deletePurchase);
 //purchaseOrder
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
