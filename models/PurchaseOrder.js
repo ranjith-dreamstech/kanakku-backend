@@ -8,7 +8,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
   },
   purchaseOrderDate: {
     type: Date,
@@ -29,20 +29,20 @@ const purchaseOrderSchema = new mongoose.Schema({
       required: true
     },
     key: String,
-    productId: {
+    id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
       required: true
     },
-    quantity: {
+    qty: {
       type: Number,
       required: true
     },
-    units: String,
-    unit: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Unit'
-    },
+    // units: String,
+    // unit: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: 'Unit'
+    // },
     rate: {
       type: Number,
       required: true
@@ -63,13 +63,13 @@ const purchaseOrderSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['NEW', 'PENDING', 'COMPLETED', 'CANCELLED'],
-    default: 'NEW'
+    enum: ['new', 'pending', 'completed', 'cancelled'],
+    default: 'new'
   },
   paymentMode: {
     type: String,
     enum: ['CASH', 'CREDIT', 'CHECK', 'BANK_TRANSFER', 'OTHER'],
-    required: true
+    required: false
   },
   taxableAmount: {
     type: Number,
@@ -93,7 +93,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   },
   bank: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Bank'
+    ref: 'BankDetail',
   },
   notes: String,
   termsAndCondition: String,

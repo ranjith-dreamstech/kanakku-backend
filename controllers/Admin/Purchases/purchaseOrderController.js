@@ -11,6 +11,7 @@ const createPurchaseOrder = async (req, res) => {
     try {
         const { 
             vendorId,
+            orderDate,
             dueDate,
             referenceNo,
             items,
@@ -27,15 +28,15 @@ const createPurchaseOrder = async (req, res) => {
         } = req.body;
 
         // Validate vendor exists and is a supplier
-        const vendor = await User.findById(vendorId);
-        if (!vendor || vendor.user_type !== 2) {
-            return res.status(400).json({ message: 'Invalid vendor ID or vendor is not a supplier' });
-        }
+        // const vendor = await User.findById(vendorId);
+        // if (!vendor || vendor.user_type !== 2) {
+        //     return res.status(400).json({ message: 'Invalid vendor ID or vendor is not a supplier' });
+        // }
 
         // Validate requesting user exists
         const user = await User.findById(userId);
         if (!user) {
-            return res.status(400).json({ message: 'Invalid user ID' });
+            return res.status(422).json({ message: 'Invalid user ID' });
         }
 
         // Get bill from and bill to user addresses
@@ -43,7 +44,7 @@ const createPurchaseOrder = async (req, res) => {
         const billToUser = await User.findById(billTo);
         
         if (!billFromUser || !billToUser) {
-            return res.status(400).json({ message: 'Invalid bill from or bill to user ID' });
+            return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
         }
 
         // Validate at least one address exists
@@ -53,9 +54,9 @@ const createPurchaseOrder = async (req, res) => {
 
         // Validate products in items
         for (const item of items) {
-            const product = await Product.findById(item.productId);
+            const product = await Product.findById(item.id);
             if (!product) {
-                return res.status(400).json({ message: `Invalid product ID: ${item.productId}` });
+                return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
             }
         }
 
@@ -66,7 +67,7 @@ const createPurchaseOrder = async (req, res) => {
         let totalAmount = 0;
 
         items.forEach(item => {
-            const itemAmount = item.quantity * (item.rate || 0);
+            const itemAmount = item.qty * (item.rate || 0);
             const itemDiscount = item.discount || 0;
             const itemTax = item.tax || 0;
             
@@ -79,14 +80,14 @@ const createPurchaseOrder = async (req, res) => {
         // Create purchase order
         const purchaseOrder = new PurchaseOrder({
             vendorId,
-            purchaseOrderDate: new Date(),
-            dueDate: new Date(dueDate),
+            purchaseOrderDate: new Date(orderDate),
+            dueDate: new Date(orderDate),
             referenceNo: referenceNo || '',
             items: items.map(item => ({
                 ...item,
-                amount: item.amount || (item.quantity * (item.rate || 0))
+                amount: item.amount || (item.qty * (item.rate || 0))
             })),
-            status: status || 'NEW',
+            status: status || 'new',
             paymentMode,
             taxableAmount: req.body.taxableAmount || taxableAmount,
             totalDiscount: req.body.totalDiscount || totalDiscount,
@@ -100,25 +101,25 @@ const createPurchaseOrder = async (req, res) => {
             signatureId: signatureId || null,
             signatureImage: req.file ? req.file.path : null,
             userId,
-            billFrom: billFromUser.address || '',
-            billTo: billToUser.address || '',
+            billFrom: billFrom,
+            billTo: billTo,
             convert_type: convert_type || 'purchase'
         });
 
         await purchaseOrder.save();
 
-        res.status(201).json({ 
+        res.status(200).json({ 
             message: 'Purchase order created successfully', 
             data: {
                 purchaseOrder: {
                     id: purchaseOrder._id,
                     purchaseOrderId: purchaseOrder.purchaseOrderId,
-                    vendor: {
-                        id: vendor._id,
-                        name: `${vendor.firstName} ${vendor.lastName}`
-                    },
+                    // vendor: {
+                    //     id: vendor._id,
+                    //     name: `${vendor.firstName} ${vendor.lastName}`
+                    // },
                     purchaseOrderDate: purchaseOrder.purchaseOrderDate,
-                    dueDate: purchaseOrder.dueDate,
+                    dueDate: purchaseOrder.orderDate,
                     status: purchaseOrder.status,
                     TotalAmount: purchaseOrder.TotalAmount,
                     billFrom: purchaseOrder.billFrom,
@@ -133,9 +134,10 @@ const createPurchaseOrder = async (req, res) => {
             }
         });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ 
             message: 'Error creating purchase order',
-            error: err.message 
+            error: err
         });
     }
 };
@@ -634,7 +636,7 @@ const listPurchaseOrders = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching purchase orders',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+            error: err.message
         });
     }
 };
