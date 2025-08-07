@@ -120,7 +120,7 @@ const createPurchase = async (req, res) => {
         id: item.id,
         name: item.name,
         unit: item.unit,
-        qty: item.quantity,
+        qty: item.qty,
         rate: item.rate,
         discount: item.discount,
         tax: item.tax,
@@ -200,7 +200,7 @@ const createPurchase = async (req, res) => {
         }
 
         // Update quantity
-        inventory.quantity += item.quantity || 0;
+        inventory.quantity += item.qty || 0;
 
         // Add to inventory history
         inventory.inventory_history.push({
@@ -208,7 +208,7 @@ const createPurchase = async (req, res) => {
           quantity: inventory.quantity,
           notes: `Stock in from purchase ${purchase.purchaseId}`,
           type: 'stock_in',
-          adjustment: item.quantity || 0,
+          adjustment: item.qty || 0,
           referenceId: purchase._id,
           referenceType: 'purchase',
           createdBy: userId
@@ -564,6 +564,11 @@ const getPurchaseById = async (req, res) => {
                 path: 'bank',
                 model: 'BankDetail',
                 select: 'bankName accountNumber accountHoldername IFSCCode'
+            })
+            .populate({
+                path: 'paymentMode',
+                model: 'PaymentMode',
+                select: 'name slug status'
             });
 
         if (!purchase) {
@@ -636,6 +641,14 @@ const getPurchaseById = async (req, res) => {
             ifscCode: purchase.bank.IFSCCode || null
         } : null;
 
+        // Payment mode details
+        const paymentModeDetails = purchase.paymentMode ? {
+            id: purchase.paymentMode._id,
+            name: purchase.paymentMode.name,
+            slug: purchase.paymentMode.slug,
+            status: purchase.paymentMode.status
+        } : null;
+
         // Signature details
         const signatureDetails = purchase.sign_type === 'eSignature' ? {
             name: purchase.signatureName || null,
@@ -680,7 +693,7 @@ const getPurchaseById = async (req, res) => {
             dueDate: formatDate(purchase.dueDate),
             referenceNo: purchase.referenceNo,
             status: purchase.status,
-            paymentMode: purchase.paymentMode,
+            paymentMode: paymentModeDetails,
             taxableAmount: purchase.taxableAmount,
             totalDiscount: purchase.totalDiscount,
             totalTax: purchase.totalTax,
