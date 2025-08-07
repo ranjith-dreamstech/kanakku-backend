@@ -40,10 +40,10 @@ const createDebitNote = async (req, res) => {
     }
 
     // Validate created by user
-    const createdByUser = await User.findById(createdBy);
-    if (!createdByUser) {
-      return res.status(422).json({ message: 'Invalid created by user ID' });
-    }
+    // const createdByUser = await User.findById(createdBy);
+    // if (!createdByUser) {
+    //   return res.status(422).json({ message: 'Invalid created by user ID' });
+    // }
 
     // Validate products in items
     for (const item of items) {
