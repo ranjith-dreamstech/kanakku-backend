@@ -414,7 +414,6 @@ const getAllPurchases = async (req, res) => {
 };
 
 // Get purchase by ID
-// Get purchase by ID
 const getPurchaseById = async (req, res) => {
     try {
         const purchase = await Purchase.findById(req.params.id)
@@ -590,30 +589,113 @@ const getPurchaseById = async (req, res) => {
 
 // Update purchase status
 const updatePurchaseStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
+    try {
+        const { status } = req.body;
+        const { id } = req.params;
 
-    const purchase = await Purchase.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
+        // Validate status
+        const validStatuses = ['pending', 'completed', 'cancelled', 'partially_paid', 'paid'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Invalid status value' 
+            });
+        }
 
-    if (!purchase) {
-      return res.status(404).json({ message: 'Purchase not found' });
+        // Find and update purchase
+        const purchase = await Purchase.findByIdAndUpdate(
+            id,
+            { status },
+            { new: true }
+        )
+        .populate('vendorId', 'firstName lastName email phone')
+        .populate('userId', 'firstName lastName email')
+        .populate('billFrom', 'firstName lastName email profileImage phone')
+        .populate('billTo', 'firstName lastName email profileImage phone')
+        .populate({
+            path: 'items.id',
+            model: 'Product',
+            select: 'name sku description'
+        })
+        .populate({
+            path: 'bank',
+            model: 'BankDetail',
+            select: 'bankName accountNumber accountHoldername IFSCCode'
+        });
+
+        if (!purchase) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Purchase not found' 
+            });
+        }
+
+        // Format dates as "dd, MMM yyyy"
+        const formatDate = (date) => {
+            if (!date) return null;
+            const d = new Date(date);
+            const day = d.getDate().toString().padStart(2, '0');
+            const month = d.toLocaleString('default', { month: 'short' });
+            const year = d.getFullYear();
+            return `${day}, ${month} ${year}`;
+        };
+
+        // Prepare response data
+        const responseData = {
+            id: purchase._id,
+            purchaseId: purchase.purchaseId,
+            purchaseOrderId: purchase.purchaseOrderId,
+            purchaseDate: formatDate(purchase.purchaseDate),
+            dueDate: formatDate(purchase.dueDate),
+            referenceNo: purchase.referenceNo,
+            status: purchase.status,
+            paymentMode: purchase.paymentMode,
+            taxableAmount: purchase.taxableAmount,
+            totalDiscount: purchase.totalDiscount,
+            totalTax: purchase.totalTax,
+            totalAmount: purchase.totalAmount,
+            paidAmount: purchase.paidAmount,
+            balanceAmount: purchase.balanceAmount,
+            items: purchase.items.map(item => ({
+                id: item.id?._id || null,
+                product: item.id ? {
+                    id: item.id._id,
+                    name: item.id.name,
+                    sku: item.id.sku,
+                    description: item.id.description
+                } : null,
+                name: item.name,
+                unit: item.unit,
+                qty: item.qty,
+                rate: item.rate,
+                discount: item.discount,
+                tax: item.tax,
+                discount_type: item.discount_type,
+                discount_value: item.discount_value,
+                amount: item.amount
+            })),
+            notes: purchase.notes,
+            termsAndCondition: purchase.termsAndCondition,
+            sign_type: purchase.sign_type,
+            checkNumber: purchase.checkNumber,
+            createdAt: formatDate(purchase.createdAt),
+            updatedAt: formatDate(purchase.updatedAt)
+        };
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchase status updated successfully',
+            data: responseData
+        });
+
+    } catch (err) {
+        console.error('Update purchase status error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating purchase status',
+            error: err.message
+        });
     }
-
-    res.status(200).json({
-      message: 'Purchase status updated successfully',
-      data: purchase
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ 
-      message: 'Error updating purchase status',
-      error: err.message
-    });
-  }
 };
 
 // Delete purchase (soft delete)
