@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const inventoryHistorySchema = new mongoose.Schema({
   unitId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Unit'
+    type: String,
+    required: false,
   },
   quantity: {
     type: Number,

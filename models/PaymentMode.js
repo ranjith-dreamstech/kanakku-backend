@@ -8,7 +8,18 @@ const paymentModeSchema = new mongoose.Schema(
       unique: true,
       minlength: 3,
       trim: true
-    }
+    },
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      minlength: 3,
+      trim: true
+    },
+    status: {
+      type: Boolean,
+      default: true,
+    },
   },
   { 
     timestamps: true,

@@ -5,9 +5,9 @@ const purchaseValidator = [
     .notEmpty().withMessage('Purchase order ID is required')
     .isString().withMessage('Purchase order ID must be a string'),
   
-  body('vendorId')
-    .notEmpty().withMessage('Vendor ID is required')
-    .isMongoId().withMessage('Invalid vendor ID format'),
+  // body('vendorId')
+  //   .notEmpty().withMessage('Vendor ID is required')
+  //   .isMongoId().withMessage('Invalid vendor ID format'),
   
   body('purchaseDate')
     .notEmpty().withMessage('Purchase date is required')
@@ -17,11 +17,11 @@ const purchaseValidator = [
   body('items')
     .isArray({ min: 1 }).withMessage('At least one item is required'),
   
-  body('items.*.productId')
+  body('items.*.id')
     .notEmpty().withMessage('Product ID is required')
     .isMongoId().withMessage('Invalid product ID format'),
   
-  body('items.*.quantity')
+  body('items.*.qty')
     .notEmpty().withMessage('Quantity is required')
     .isNumeric().withMessage('Quantity must be a number')
     .toFloat(),

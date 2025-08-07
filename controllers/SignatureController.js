@@ -454,7 +454,8 @@ const createPaymentMode = async (req, res) => {
 
         // Create new payment mode
         const paymentMode = new PaymentMode({
-            name
+            name,
+            slug: slugify(name, { lower: true })
         });
 
         await paymentMode.save();
@@ -478,6 +479,13 @@ const createPaymentMode = async (req, res) => {
         });
     }
 };
+
+const slugify = (str) => {
+    return str
+        .toLowerCase()
+        .replace(/[^\w ]+/g, '')
+        .replace(/ +/g, '-');
+}
 const listPaymentModes = async (req, res) => {
   try {
     const paymentModes = await PaymentMode.find({})
@@ -489,6 +497,7 @@ const listPaymentModes = async (req, res) => {
       data: paymentModes.map(mode => ({
         id: mode._id,
         name: mode.name,
+        slug: mode.slug,
         createdAt: mode.createdAt,
         updatedAt: mode.updatedAt
       }))

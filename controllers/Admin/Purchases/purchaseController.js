@@ -28,7 +28,8 @@ const createPurchase = async (req, res) => {
       userId,
       billFrom,
       billTo,
-      paidAmount
+      paidAmount,
+      grandTotal
     } = req.body;
 
     // Validate purchase order exists
@@ -58,9 +59,9 @@ const createPurchase = async (req, res) => {
 
     // Validate products in items
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.id);
       if (!product) {
-        return res.status(422).json({ message: `Invalid product ID: ${item.productId}` });
+        return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
       }
     }
 
@@ -108,8 +109,8 @@ const createPurchase = async (req, res) => {
       totalTax: req.body.totalTax || totalTax,
       roundOff: req.body.roundOff || false,
       totalAmount: req.body.totalAmount || totalAmount,
-      paidAmount: paidAmount || 0,
-      balanceAmount: (req.body.totalAmount || totalAmount) - (paidAmount || 0),
+      paidAmount: grandTotal || 0,
+      balanceAmount: 0,
       bank: req.body.bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',
@@ -127,14 +128,14 @@ const createPurchase = async (req, res) => {
     );
 
     // Create supplier payment if paidAmount > 0
-    if (paidAmount > 0) {
+    if (grandTotal > 0) {
       const supplierPayment = new SupplierPayment({
         purchaseId: purchase._id,
         purchaseOrderId,
-        supplierId: vendorId,
+        supplierId: billTo,
         paymentDate: new Date(purchaseDate),
         paymentMode,
-        amount: paidAmount,
+        amount: grandTotal,
         status: 'completed',
         notes: `Payment for purchase ${purchase.purchaseId}`,
         createdBy: userId
@@ -143,7 +144,7 @@ const createPurchase = async (req, res) => {
       await supplierPayment.save();
 
       // Update purchase status if fully paid
-      if (paidAmount >= purchase.totalAmount) {
+      if (grandTotal >= purchase.totalAmount) {
         await Purchase.findByIdAndUpdate(
           purchase._id,
           { status: 'paid', balanceAmount: 0 }
@@ -159,20 +160,20 @@ const createPurchase = async (req, res) => {
     // Update inventory for each product
     for (const item of items) {
       let inventory = await Inventory.findOne({ 
-        productId: item.productId, 
+        productId: item.id, 
         userId 
       });
 
       if (!inventory) {
         inventory = new Inventory({
-          productId: item.productId,
+          productId: item.id,
           userId,
           quantity: 0
         });
       }
 
       // Update quantity
-      inventory.quantity += item.quantity;
+      inventory.quantity += item.qty;
 
       // Add to inventory history
       inventory.inventory_history.push({
@@ -180,7 +181,7 @@ const createPurchase = async (req, res) => {
         quantity: inventory.quantity,
         notes: `Stock in from purchase ${purchase.purchaseId}`,
         type: 'stock_in',
-        adjustment: item.quantity,
+        adjustment: item.qty,
         referenceId: purchase._id,
         referenceType: 'purchase',
         createdBy: userId

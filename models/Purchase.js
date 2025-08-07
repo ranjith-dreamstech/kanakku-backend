@@ -12,7 +12,7 @@ const purchaseSchema = new mongoose.Schema({
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false
   },
   purchaseDate: {
     type: Date,
@@ -28,10 +28,10 @@ const purchaseSchema = new mongoose.Schema({
     default: ""
   },
   items: [{
-    productId: {
+    id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
-      required: true
+      required: false
     },
     name: {
       type: String,
@@ -41,9 +41,9 @@ const purchaseSchema = new mongoose.Schema({
       type: String,
       required: false
     },
-    quantity: {
+    qty: {
       type: Number,
-      required: true
+      required: false
     },
     rate: {
       type: Number,
@@ -82,7 +82,7 @@ const purchaseSchema = new mongoose.Schema({
   },
   paymentMode: {
     type: String,
-    enum: ['CASH', 'CREDIT', 'CHECK', 'BANK_TRANSFER', 'OTHER'],
+    ref: 'PaymentMode',
     required: false
   },
   taxableAmount: {
