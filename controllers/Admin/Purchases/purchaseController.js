@@ -252,7 +252,7 @@ const getAllPurchases = async (req, res) => {
 
         // Add payment mode filter
         if (paymentMode) {
-            query.paymentMode = paymentMode;
+            query.paymentMode = { $exists: true, $ne: null };
         }
 
         // Add date range filter
@@ -279,8 +279,8 @@ const getAllPurchases = async (req, res) => {
         // Get total count
         const total = await Purchase.countDocuments(query);
 
-        // Get purchases with pagination and populate all necessary fields
-        const purchases = await Purchase.find(query)
+        // Build base query
+        let purchaseQuery = Purchase.find(query)
             .populate('vendorId', 'firstName lastName email phone')
             .populate('userId', 'firstName lastName email')
             .populate('billFrom', 'firstName lastName email profileImage phone')
@@ -290,14 +290,22 @@ const getAllPurchases = async (req, res) => {
                 model: 'BankDetail',
                 select: 'bankName accountNumber accountHoldername IFSCCode'
             })
-            .populate({
-                path: 'paymentMode',
-                model: 'PaymentMode',
-                select: 'name slug status'
-            })
             .sort({ purchaseDate: -1 })
             .skip(skip)
             .limit(Number(limit));
+
+        // Conditionally populate paymentMode only when paymentMode filter is applied
+        if (paymentMode) {
+            purchaseQuery = purchaseQuery.populate({
+                path: 'paymentMode',
+                model: 'PaymentMode',
+                select: 'name slug status',
+                match: { _id: mongoose.Types.ObjectId.isValid(paymentMode) ? mongoose.Types.ObjectId(paymentMode) : null }
+            });
+        }
+
+        // Execute query
+        const purchases = await purchaseQuery;
 
         const formattedPurchases = await Promise.all(purchases.map(async (purchase) => {
             const baseUrl = `${req.protocol}://${req.get('host')}/`;
@@ -361,6 +369,7 @@ const getAllPurchases = async (req, res) => {
                 ifscCode: purchase.bank.IFSCCode || null
             } : null;
 
+            // Payment mode details (only if paymentMode was populated)
             const paymentModeDetails = purchase.paymentMode ? {
                 id: purchase.paymentMode._id,
                 name: purchase.paymentMode.name,
