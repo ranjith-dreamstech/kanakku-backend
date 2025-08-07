@@ -145,39 +145,39 @@ const createPurchase = async (req, res) => {
       );
     }
 
-
-     // Update inventory for each product if status is 'completed'
-
-    for (const item of items) {
-      let inventory = await Inventory.findOne({ 
-        productId: item.id, 
-        userId 
-      });
-
-      if (!inventory) {
-        inventory = new Inventory({
-          productId: item.id,
-          userId,
-          quantity: 0
+    // Update inventory for each product ONLY if status is 'paid'
+    if (status === 'paid') {
+      for (const item of items) {
+        let inventory = await Inventory.findOne({ 
+          productId: item.id, 
+          userId 
         });
+
+        if (!inventory) {
+          inventory = new Inventory({
+            productId: item.id,
+            userId,
+            quantity: 0
+          });
+        }
+
+        // Update quantity
+        inventory.quantity += item.quantity || 0;
+
+        // Add to inventory history
+        inventory.inventory_history.push({
+          unitId: item.unit,
+          quantity: inventory.quantity,
+          notes: `Stock in from purchase ${purchase.purchaseId}`,
+          type: 'stock_in',
+          adjustment: item.quantity || 0,
+          referenceId: purchase._id,
+          referenceType: 'purchase',
+          createdBy: userId
+        });
+
+        await inventory.save();
       }
-
-      // Update quantity
-      inventory.quantity += item.quantity || item.qty || 0;
-
-      // Add to inventory history
-      inventory.inventory_history.push({
-        unitId: item.unit,
-        quantity: inventory.quantity,
-        notes: `Stock in from purchase ${purchase.purchaseId}`,
-        type: 'stock_in',
-        adjustment: item.quantity || item.qty || 0,
-        referenceId: purchase._id,
-        referenceType: 'purchase',
-        createdBy: userId
-      });
-
-      await inventory.save();
     }
 
     res.status(201).json({
@@ -195,10 +195,10 @@ const createPurchase = async (req, res) => {
           sign_type: purchase.sign_type,
           signatureName: purchase.signatureName,
           items: purchase.items.map(item => ({
-            id: item.id,
+            id: item.productId, // Updated to match the schema change
             name: item.name,
             unit: item.unit,
-            qty: item.qty,
+            quantity: item.quantity, // Updated to match the schema change
             rate: item.rate,
             discount: item.discount,
             tax: item.tax,
