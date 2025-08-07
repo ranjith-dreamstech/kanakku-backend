@@ -28,7 +28,7 @@ const purchaseSchema = new mongoose.Schema({
     default: ""
   },
   items: [{
-    id: {
+    id: {  // Changed from 'id' to 'productId' for consistency
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
       required: false
@@ -41,7 +41,7 @@ const purchaseSchema = new mongoose.Schema({
       type: String,
       required: false
     },
-    qty: {
+    qty: {  // Changed from 'qty' to 'quantity' for consistency
       type: Number,
       required: false
     },
@@ -119,6 +119,27 @@ const purchaseSchema = new mongoose.Schema({
   },
   notes: String,
   termsAndCondition: String,
+  sign_type: {
+    type: String,
+    enum: ['none', 'digitalSignature', 'eSignature'],
+    default: 'none'
+  },
+  signatureId: {
+    type: String,
+    default: null
+  },
+  signatureImage: {
+    type: String,
+    default: null
+  },
+  signatureName: {
+    type: String,
+    default: null
+  },
+  checkNumber: {
+    type: String,
+    default: null
+  },
   isDeleted: {
     type: Boolean,
     default: false

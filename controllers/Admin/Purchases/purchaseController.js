@@ -99,10 +99,10 @@ const createPurchase = async (req, res) => {
       dueDate: new Date(purchaseDate ? new Date(purchaseDate) : new Date()), // Same as purchase date if not specified
       referenceNo: referenceNo || '',
       items: items.map(item => ({
-        productId: item.id,
+        id: item.id,
         name: item.name,
         unit: item.unit,
-        quantity: item.quantity,
+        qty: item.quantity,
         rate: item.rate,
         discount: item.discount,
         tax: item.tax,
