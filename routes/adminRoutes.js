@@ -79,23 +79,10 @@ router.put('/tax-groups/:id', protect, updateTaxGroupValidator, TaxGroupControll
 router.delete('/tax-groups/:id', protect, TaxGroupController.deleteTaxGroup);
 
 //Product Routes
-router.post(
-  '/products',
-  protect,
-  uploadProductFields,
-  handleUploadError,
-  createProductValidator,
-  ProductController.createProduct
-);
+router.post('/products', protect, uploadProductFields, handleUploadError, createProductValidator, ProductController.createProduct);
 router.get('/products', protect, ProductController.getAllProducts);
 router.get('/products/:id', protect, ProductController.getProductById);
-router.put(
-  '/products/:id',
-  protect,
-  uploadProductFields,
-  updateProductValidator,
-  ProductController.updateProduct
-);
+router.put('/products/:id', protect, uploadProductFields, updateProductValidator, ProductController.updateProduct);
 router.delete('/products/:id', protect, ProductController.deleteProduct);
 router.get('/product-categories', protect, ProductController.getAllProductCategories);
 router.get('/product-brands', protect, ProductController.getAllProductBrands);
@@ -152,15 +139,8 @@ router.get('/bank-accounts', protect, BankDetailController.listBankDetails);
 router.put('/bank-accounts/:id', protect, updateBankDetailValidator, BankDetailController.updateBankDetail);
 router.delete('/bank-accounts/:id', protect, BankDetailController.deleteBankDetail);
 router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankDetailController.updateBankDetailStatus);
-
-router.put(
-  '/company-details/:userId',
-  protect,
-  uploadCompanyFields,
-  handleUploadError,
-  updateCompanySettingsValidator,
-  CompanySettings.updateCompanySettings
-);
+//company
+router.put('/company-details/:userId', protect, uploadCompanyFields, handleUploadError, updateCompanySettingsValidator, CompanySettings.updateCompanySettings);
 router.get('/company-details/:userId', protect, CompanySettings.getCompanySettings);
 
 module.exports = router;

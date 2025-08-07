@@ -1,4 +1,3 @@
-// models/DebitNote.js
 const mongoose = require('mongoose');
 
 const debitNoteSchema = new mongoose.Schema({

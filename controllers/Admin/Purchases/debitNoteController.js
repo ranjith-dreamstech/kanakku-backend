@@ -176,9 +176,9 @@ const createDebitNote = async (req, res) => {
 const getAllDebitNotes = async (req, res) => {
   try {
     const { status, vendorId, startDate, endDate } = req.query;
-    const userId = req.user._id; // Assuming user is authenticated
+    const userId = req.user;
 
-    let query = { userId, isDeleted: false };
+    let query = { isDeleted: false };
 
     if (status) {
       query.status = status;
@@ -217,7 +217,7 @@ const getAllDebitNotes = async (req, res) => {
 const getDebitNoteById = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user._id; // Assuming user is authenticated
+    const userId = req.user; // Assuming user is authenticated
 
     const debitNote = await DebitNote.findOne({ _id: id, userId, isDeleted: false })
       .populate('vendorId', 'name email phone address')
@@ -247,7 +247,7 @@ const updateDebitNoteStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, approvedBy } = req.body;
-    const userId = req.user._id; // Assuming user is authenticated
+    const userId = req.user; // Assuming user is authenticated
 
     const validStatuses = ['draft', 'pending', 'approved', 'rejected', 'cancelled'];
     if (!validStatuses.includes(status)) {
