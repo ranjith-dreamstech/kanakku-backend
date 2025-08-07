@@ -20,6 +20,10 @@ const debitNoteSchema = new mongoose.Schema({
     default: Date.now,
     required: true
   },
+  dueDate: {
+    type: Date,
+    required: false
+  },
   referenceNo: {
     type: String,
     default: ""
@@ -81,6 +85,11 @@ const debitNoteSchema = new mongoose.Schema({
     enum: ['draft', 'pending', 'approved', 'rejected', 'cancelled'],
     default: 'draft'
   },
+  paymentMode: {
+    type: String,
+    ref: 'PaymentMode',
+    required: false
+  },
   taxableAmount: {
     type: Number,
     required: true
@@ -97,8 +106,41 @@ const debitNoteSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  paidAmount: {
+    type: Number,
+    default: 0
+  },
+  balanceAmount: {
+    type: Number,
+    default: 0
+  },
+  bank: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BankDetail',
+  },
   notes: String,
   termsAndCondition: String,
+  sign_type: {
+    type: String,
+    enum: ['none', 'digitalSignature', 'eSignature'],
+    default: 'none'
+  },
+  signatureId: {
+    type: String,
+    default: null
+  },
+  signatureImage: {
+    type: String,
+    default: null
+  },
+  signatureName: {
+    type: String,
+    default: null
+  },
+  checkNumber: {
+    type: String,
+    default: null
+  },
   isDeleted: {
     type: Boolean,
     default: false
@@ -116,6 +158,16 @@ const debitNoteSchema = new mongoose.Schema({
   approvedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  billFrom: {
+    ref: 'User',
+    type: mongoose.Schema.Types.ObjectId,
+    required: true
+  },
+  billTo: {
+    ref: 'User',
+    type: mongoose.Schema.Types.ObjectId,
+    required: true
   }
 }, {
   timestamps: true

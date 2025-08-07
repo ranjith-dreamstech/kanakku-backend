@@ -24,7 +24,15 @@ const createDebitNote = async (req, res) => {
       termsAndCondition,
       status = 'draft',
       userId,
-      createdBy
+      createdBy,
+      billFrom,
+      billTo,
+      sign_type,
+      signatureId,
+      signatureName,
+      checkNumber,
+      bank,
+      paidAmount = 0
     } = req.body;
 
     // Validate purchase exists
@@ -39,17 +47,40 @@ const createDebitNote = async (req, res) => {
       return res.status(422).json({ message: 'Invalid vendor ID from purchase' });
     }
 
+    // Validate bill from and bill to users
+    const billFromUser = await User.findById(billFrom);
+    const billToUser = await User.findById(billTo);
+    if (!billFromUser || !billToUser) {
+      return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
+    }
+
     // Validate created by user
-    // const createdByUser = await User.findById(createdBy);
-    // if (!createdByUser) {
-    //   return res.status(422).json({ message: 'Invalid created by user ID' });
-    // }
+    const createdByUser = await User.findById(createdBy);
+    if (!createdByUser) {
+      return res.status(422).json({ message: 'Invalid created by user ID' });
+    }
 
     // Validate products in items
     for (const item of items) {
       const product = await Product.findById(item.productId);
       if (!product) {
         return res.status(422).json({ message: `Invalid product ID: ${item.productId}` });
+      }
+    }
+
+    // Validate signature type
+    const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
+    if (sign_type && !validSignatureTypes.includes(sign_type)) {
+      return res.status(400).json({ message: 'Invalid signature type' });
+    }
+
+    // Validate signature data if eSignature is selected
+    if (sign_type === 'eSignature') {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Signature image is required for eSignature' });
+      }
+      if (!signatureName) {
+        return res.status(400).json({ message: 'Signature name is required for eSignature' });
       }
     }
 
@@ -67,12 +98,14 @@ const createDebitNote = async (req, res) => {
     }, 0);
 
     const totalAmount = taxableAmount + totalTax - totalDiscount;
+    const balanceAmount = totalAmount - paidAmount;
 
     // Create debit note
     const debitNote = new DebitNote({
       purchaseId,
       vendorId: purchase.vendorId,
       debitNoteDate: debitNoteDate ? new Date(debitNoteDate) : new Date(),
+      dueDate: new Date(debitNoteDate ? new Date(debitNoteDate) : new Date()),
       referenceNo: referenceNo || '',
       items: items.map(item => ({
         productId: item.productId,
@@ -93,10 +126,20 @@ const createDebitNote = async (req, res) => {
       totalDiscount,
       totalTax,
       totalAmount,
+      paidAmount,
+      balanceAmount,
+      bank: bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',
+      sign_type: sign_type || 'none',
+      signatureId: signatureId || null,
+      signatureImage: sign_type === 'eSignature' ? req.file.path : null,
+      signatureName: sign_type === 'eSignature' ? signatureName : null,
+      checkNumber: checkNumber || null,
       userId,
-      createdBy
+      createdBy,
+      billFrom,
+      billTo
     });
 
     await debitNote.save();
@@ -146,6 +189,10 @@ const createDebitNote = async (req, res) => {
           debitNoteDate: debitNote.debitNoteDate,
           status: debitNote.status,
           totalAmount: debitNote.totalAmount,
+          paidAmount: debitNote.paidAmount,
+          balanceAmount: debitNote.balanceAmount,
+          sign_type: debitNote.sign_type,
+          signatureName: debitNote.signatureName,
           items: debitNote.items.map(item => ({
             productId: item.productId,
             name: item.name,
