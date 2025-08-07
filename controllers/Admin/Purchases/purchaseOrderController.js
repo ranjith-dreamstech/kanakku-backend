@@ -618,6 +618,18 @@ const listPurchaseOrders = async (req, res) => {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(Number(limit));
+
+        // Get the next purchase order ID
+        const lastPurchaseOrder = await PurchaseOrder.findOne()
+            .sort({ purchaseOrderId: -1 })
+            .select('purchaseOrderId');
+        
+        let nextPurchaseOrderId = 'PO-000001'; // Default if no orders exist
+        if (lastPurchaseOrder) {
+            const lastNumber = parseInt(lastPurchaseOrder.purchaseOrderId.split('-')[1]);
+            nextPurchaseOrderId = `PO-${String(lastNumber + 1).padStart(6, '0')}`;
+        }
+
         const formattedOrders = await Promise.all(purchaseOrders.map(async (order) => {
             const baseUrl = `${req.protocol}://${req.get('host')}/`;
             const signatureImage = order.signatureImage 
@@ -702,6 +714,7 @@ const listPurchaseOrders = async (req, res) => {
             message: 'Purchase orders retrieved successfully',
             data: {
                 purchaseOrders: formattedOrders,
+                nextPurchaseOrderId, // Added the next purchase order ID
                 pagination: {
                     total,
                     page: Number(page),
@@ -714,6 +727,7 @@ const listPurchaseOrders = async (req, res) => {
     } catch (err) {
         console.error('List purchase orders error:', err);
         res.status(500).json({
+            success: false,
             message: 'Error fetching purchase orders',
             error: err.message
         });

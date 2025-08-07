@@ -229,7 +229,8 @@ const getAllPurchases = async (req, res) => {
             search = '',
             vendorId,
             startDate,
-            endDate
+            endDate,
+            paymentMode
         } = req.query;
 
         const skip = (page - 1) * limit;
@@ -247,6 +248,11 @@ const getAllPurchases = async (req, res) => {
         // Add vendor filter
         if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
             query.vendorId = vendorId;
+        }
+
+        // Add payment mode filter
+        if (paymentMode) {
+            query.paymentMode = paymentMode;
         }
 
         // Add date range filter
@@ -273,7 +279,7 @@ const getAllPurchases = async (req, res) => {
         // Get total count
         const total = await Purchase.countDocuments(query);
 
-        // Get purchases with pagination
+        // Get purchases with pagination and populate all necessary fields
         const purchases = await Purchase.find(query)
             .populate('vendorId', 'firstName lastName email phone')
             .populate('userId', 'firstName lastName email')
@@ -283,6 +289,11 @@ const getAllPurchases = async (req, res) => {
                 path: 'bank',
                 model: 'BankDetail',
                 select: 'bankName accountNumber accountHoldername IFSCCode'
+            })
+            .populate({
+                path: 'paymentMode',
+                model: 'PaymentMode',
+                select: 'name slug status'
             })
             .sort({ purchaseDate: -1 })
             .skip(skip)
@@ -350,6 +361,13 @@ const getAllPurchases = async (req, res) => {
                 ifscCode: purchase.bank.IFSCCode || null
             } : null;
 
+            const paymentModeDetails = purchase.paymentMode ? {
+                id: purchase.paymentMode._id,
+                name: purchase.paymentMode.name,
+                slug: purchase.paymentMode.slug,
+                status: purchase.paymentMode.status
+            } : null;
+
             // Signature details
             const signatureDetails = purchase.sign_type === 'eSignature' ? {
                 name: purchase.signatureName || null,
@@ -369,7 +387,7 @@ const getAllPurchases = async (req, res) => {
                 dueDate: formatDate(purchase.dueDate),
                 referenceNo: purchase.referenceNo,
                 status: purchase.status,
-                paymentMode: purchase.paymentMode,
+                paymentMode: paymentModeDetails,
                 taxableAmount: purchase.taxableAmount,
                 totalDiscount: purchase.totalDiscount,
                 totalTax: purchase.totalTax,
