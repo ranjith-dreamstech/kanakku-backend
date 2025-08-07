@@ -28,10 +28,8 @@ const createPurchase = async (req, res) => {
       userId,
       billFrom,
       billTo,
-      paidAmount,
       grandTotal
     } = req.body;
-
     // Validate purchase order exists
     // const purchaseOrder = await PurchaseOrder.findOne({ purchaseOrderId });
     // if (!purchaseOrder) {
@@ -126,36 +124,6 @@ const createPurchase = async (req, res) => {
       { purchaseOrderId },
       { status: 'completed' }
     );
-
-    // Create supplier payment if paidAmount > 0
-    if (grandTotal > 0) {
-      const supplierPayment = new SupplierPayment({
-        purchaseId: purchase._id,
-        purchaseOrderId,
-        supplierId: billTo,
-        paymentDate: new Date(purchaseDate),
-        paymentMode,
-        amount: grandTotal,
-        status: 'completed',
-        notes: `Payment for purchase ${purchase.purchaseId}`,
-        createdBy: userId
-      });
-
-      await supplierPayment.save();
-
-      // Update purchase status if fully paid
-      if (grandTotal >= purchase.totalAmount) {
-        await Purchase.findByIdAndUpdate(
-          purchase._id,
-          { status: 'paid', balanceAmount: 0 }
-        );
-      } else {
-        await Purchase.findByIdAndUpdate(
-          purchase._id,
-          { status: 'partially_paid' }
-        );
-      }
-    }
 
     // Update inventory for each product
     for (const item of items) {

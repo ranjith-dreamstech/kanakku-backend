@@ -7,7 +7,7 @@ const purchaseSchema = new mongoose.Schema({
   },
   purchaseOrderId: {
     type: String,
-    required: true
+    required: false
   },
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,

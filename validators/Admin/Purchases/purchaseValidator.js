@@ -1,9 +1,9 @@
 const { body } = require('express-validator');
 
 const purchaseValidator = [
-  body('purchaseOrderId')
-    .notEmpty().withMessage('Purchase order ID is required')
-    .isString().withMessage('Purchase order ID must be a string'),
+  // body('purchaseOrderId')
+  //   .notEmpty().withMessage('Purchase order ID is required')
+  //   .isString().withMessage('Purchase order ID must be a string'),
   
   // body('vendorId')
   //   .notEmpty().withMessage('Vendor ID is required')
