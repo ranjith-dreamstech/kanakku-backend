@@ -22,7 +22,6 @@ const createPurchase = async (req, res) => {
       billTo,
       referenceNo,
       purchaseDate,
-      status = 'pending',
       items,
       notes,
       termsAndCondition,
@@ -31,12 +30,13 @@ const createPurchase = async (req, res) => {
       totalTax,
       totalDiscount,
       grandTotal,
-      paidAmount = 0,
       sign_type,
       signatureId,
       signatureName,
       checkNumber,
-      bank
+      bank,
+      sp_amount,
+      sp_paid_amount
     } = req.body;
 
     // Validate bill from and bill to users
@@ -84,8 +84,23 @@ const createPurchase = async (req, res) => {
     }, 0);
 
     const calculatedGrandTotal = grandTotal || (calculatedSubTotal + calculatedTotalTax - calculatedTotalDiscount);
-    const calculatedPaidAmount = status === 'paid' ? calculatedGrandTotal : paidAmount;
-    const calculatedDueAmount = calculatedGrandTotal - calculatedPaidAmount;
+    
+    // Determine status based on payment amounts
+    let status = 'pending';
+    let paidAmount = 0;
+    let balanceAmount = calculatedGrandTotal;
+    
+    if (sp_amount && sp_paid_amount) {
+      if (sp_paid_amount === sp_amount) {
+        status = 'paid';
+        paidAmount = sp_paid_amount;
+        balanceAmount = 0;
+      } else {
+        status = 'partially_paid';
+        paidAmount = sp_paid_amount;
+        balanceAmount = sp_amount - sp_paid_amount;
+      }
+    }
 
     // Generate purchaseOrderId if not provided
     let purchaseId = req.body.purchaseId;
@@ -97,9 +112,9 @@ const createPurchase = async (req, res) => {
     // Create purchase
     const purchase = new Purchase({
       purchaseOrderId,
-      vendorId: billTo, // Assuming billTo is the vendor/supplier
+      vendorId: billTo,
       purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
-      dueDate: new Date(purchaseDate ? new Date(purchaseDate) : new Date()), // Same as purchase date if not specified
+      dueDate: new Date(purchaseDate ? new Date(purchaseDate) : new Date()),
       referenceNo: referenceNo || '',
       items: items.map(item => ({
         id: item.id,
@@ -143,7 +158,7 @@ const createPurchase = async (req, res) => {
       await PurchaseOrder.findOneAndUpdate(
         { purchaseOrderId },
         { 
-          status: status === 'completed' ? 'completed' : 
+          status: status === 'paid' ? 'completed' : 
                  status === 'cancelled' ? 'cancelled' : 
                  'pending' 
         }
@@ -168,7 +183,7 @@ const createPurchase = async (req, res) => {
       await supplierPayment.save();
     }
 
-    // Update inventory for each product ONLY if status is 'paid' or 'partially_paid'
+    // Update inventory for each product ONLY if status is 'paid'
     if (status === 'paid') {
       for (const item of items) {
         let inventory = await Inventory.findOne({ 
@@ -218,10 +233,10 @@ const createPurchase = async (req, res) => {
           sign_type: purchase.sign_type,
           signatureName: purchase.signatureName,
           items: purchase.items.map(item => ({
-            id: item.productId, // Updated to match the schema change
+            id: item.id,
             name: item.name,
             unit: item.unit,
-            quantity: item.quantity, // Updated to match the schema change
+            quantity: item.qty,
             rate: item.rate,
             discount: item.discount,
             tax: item.tax,
@@ -230,7 +245,7 @@ const createPurchase = async (req, res) => {
             discount_value: item.discount_value,
             amount: item.amount
           }))
-        },       
+        }
       }
     });
   } catch (err) {
