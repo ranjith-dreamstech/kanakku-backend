@@ -259,9 +259,10 @@ const getAllDebitNotes = async (req, res) => {
     if (search) {
       query.$or = [
         { debitNoteId: { $regex: search, $options: 'i' } },
-        { reason: { $regex: search, $options: 'i' } },
         { referenceNo: { $regex: search, $options: 'i' } },
-        { notes: { $regex: search, $options: 'i' } }
+        { notes: { $regex: search, $options: 'i' } },
+        { 'items.reason': { $regex: search, $options: 'i' } },
+        { signatureName: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -272,6 +273,8 @@ const getAllDebitNotes = async (req, res) => {
     const debitNotes = await DebitNote.find(query)
       .populate('vendorId', 'firstName lastName email phone')
       .populate('purchaseId', 'purchaseId purchaseDate totalAmount')
+      .populate('createdBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName')
       .sort({ debitNoteDate: -1 })
       .skip(skip)
       .limit(Number(limit));
@@ -302,6 +305,16 @@ const getAllDebitNotes = async (req, res) => {
         totalAmount: note.purchaseId.totalAmount || 0
       } : null;
 
+      const createdBy = note.createdBy ? {
+        id: note.createdBy._id,
+        name: `${note.createdBy.firstName || ''} ${note.createdBy.lastName || ''}`.trim()
+      } : null;
+
+      const approvedBy = note.approvedBy ? {
+        id: note.approvedBy._id,
+        name: `${note.approvedBy.firstName || ''} ${note.approvedBy.lastName || ''}`.trim()
+      } : null;
+
       return {
         id: note._id,
         debitNoteId: note.debitNoteId,
@@ -309,10 +322,16 @@ const getAllDebitNotes = async (req, res) => {
         vendor,
         purchase,
         debitNoteDate: formatDate(note.debitNoteDate),
-        reason: note.reason,
         status: note.status,
         totalAmount: note.totalAmount,
+        paidAmount: note.paidAmount || 0,
+        balanceAmount: note.balanceAmount || 0,
+        sign_type: note.sign_type || 'none',
+        signatureName: note.signatureName || null,
+        signatureImage: note.signatureImage ? `${process.env.BASE_URL}${note.signatureImage}` : null,
         notes: note.notes || null,
+        createdBy,
+        approvedBy,
         createdAt: formatDate(note.createdAt),
         updatedAt: formatDate(note.updatedAt)
       };
@@ -352,7 +371,10 @@ const getDebitNoteById = async (req, res) => {
       .populate('vendorId', 'firstName lastName email phone address')
       .populate('purchaseId', 'purchaseId purchaseDate totalAmount')
       .populate('items.productId', 'name sku barcode')
-      .populate('items.tax_group_id', 'name rate');
+      .populate('items.tax_group_id', 'name rate')
+      .populate('createdBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName')
+      .populate('bank', 'bankName accountNumber branch');
 
     if (!debitNote) {
       return res.status(404).json({ message: 'Debit note not found' });
@@ -384,6 +406,26 @@ const getDebitNoteById = async (req, res) => {
       totalAmount: debitNote.purchaseId.totalAmount || 0
     } : null;
 
+    // Bank details
+    const bank = debitNote.bank ? {
+      id: debitNote.bank._id,
+      bankName: debitNote.bank.bankName || null,
+      accountNumber: debitNote.bank.accountNumber || null,
+      branch: debitNote.bank.branch || null
+    } : null;
+
+    // Created by
+    const createdBy = debitNote.createdBy ? {
+      id: debitNote.createdBy._id,
+      name: `${debitNote.createdBy.firstName || ''} ${debitNote.createdBy.lastName || ''}`.trim()
+    } : null;
+
+    // Approved by
+    const approvedBy = debitNote.approvedBy ? {
+      id: debitNote.approvedBy._id,
+      name: `${debitNote.approvedBy.firstName || ''} ${debitNote.approvedBy.lastName || ''}`.trim()
+    } : null;
+
     // Items
     const items = debitNote.items.map(item => ({
       product: item.productId ? {
@@ -395,7 +437,11 @@ const getDebitNoteById = async (req, res) => {
       quantity: item.quantity || 0,
       rate: item.rate || 0,
       discount: item.discount || 0,
+      discount_type: item.discount_type || 'Fixed',
+      discount_value: item.discount_value || 0,
+      tax: item.tax || 0,
       amount: item.amount || 0,
+      reason: item.reason || null,
       taxGroup: item.tax_group_id ? {
         id: item.tax_group_id._id,
         name: item.tax_group_id.name || null,
@@ -411,11 +457,26 @@ const getDebitNoteById = async (req, res) => {
       vendor,
       purchase,
       debitNoteDate: formatDate(debitNote.debitNoteDate),
-      reason: debitNote.reason || null,
+      dueDate: formatDate(debitNote.dueDate),
       status: debitNote.status || null,
+      taxableAmount: debitNote.taxableAmount || 0,
+      totalDiscount: debitNote.totalDiscount || 0,
+      totalTax: debitNote.totalTax || 0,
       totalAmount: debitNote.totalAmount || 0,
+      paidAmount: debitNote.paidAmount || 0,
+      balanceAmount: debitNote.balanceAmount || 0,
+      paymentMode: debitNote.paymentMode || null,
+      bank,
       notes: debitNote.notes || null,
+      termsAndCondition: debitNote.termsAndCondition || null,
+      sign_type: debitNote.sign_type || 'none',
+      signatureId: debitNote.signatureId || null,
+      signatureImage: debitNote.signatureImage ? `${process.env.BASE_URL}${debitNote.signatureImage}` : null,
+      signatureName: debitNote.signatureName || null,
+      checkNumber: debitNote.checkNumber || null,
       items,
+      createdBy,
+      approvedBy,
       createdAt: formatDate(debitNote.createdAt),
       updatedAt: formatDate(debitNote.updatedAt)
     };
@@ -439,7 +500,14 @@ const getDebitNoteById = async (req, res) => {
 const updateDebitNoteStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, approvedBy } = req.body;
+    const { 
+      status, 
+      approvedBy,
+      sign_type,
+      signatureId,
+      signatureName,
+      signatureImage
+    } = req.body;
     const userId = req.user; // Assuming user is authenticated
 
     const validStatuses = ['draft', 'pending', 'approved', 'rejected', 'cancelled'];
@@ -447,9 +515,30 @@ const updateDebitNoteStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
-    const debitNote = await DebitNote.findOne({ _id: id, userId, isDeleted: false });
+    const debitNote = await DebitNote.findOne({ _id: id, isDeleted: false });
     if (!debitNote) {
       return res.status(404).json({ message: 'Debit note not found' });
+    }
+
+    // Validate signature type if provided
+    if (sign_type) {
+      const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
+      if (!validSignatureTypes.includes(sign_type)) {
+        return res.status(400).json({ message: 'Invalid signature type' });
+      }
+      
+      debitNote.sign_type = sign_type;
+      
+      if (sign_type === 'eSignature') {
+        if (!signatureName) {
+          return res.status(400).json({ message: 'Signature name is required for eSignature' });
+        }
+        debitNote.signatureName = signatureName;
+        debitNote.signatureImage = req.file ? req.file.path : signatureImage;
+      } else {
+        debitNote.signatureName = null;
+        debitNote.signatureImage = null;
+      }
     }
 
     // Validate approved by user if status is being approved
@@ -499,9 +588,24 @@ const updateDebitNoteStatus = async (req, res) => {
       }
     }
 
+    // Prepare response data
+    const responseData = {
+      id: debitNote._id,
+      debitNoteId: debitNote.debitNoteId,
+      status: debitNote.status,
+      approvedBy: debitNote.approvedBy ? {
+        id: debitNote.approvedBy._id,
+        name: `${debitNote.approvedBy.firstName || ''} ${debitNote.approvedBy.lastName || ''}`.trim()
+      } : null,
+      sign_type: debitNote.sign_type,
+      signatureName: debitNote.signatureName,
+      signatureImage: debitNote.signatureImage ? `${process.env.BASE_URL}${debitNote.signatureImage}` : null,
+      updatedAt: new Date(debitNote.updatedAt)
+    };
+
     res.status(200).json({
       message: 'Debit note status updated successfully',
-      data: debitNote
+      data: responseData
     });
   } catch (err) {
     console.error(err);
