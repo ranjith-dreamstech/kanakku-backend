@@ -717,10 +717,21 @@ const getPurchaseById = async (req, res) => {
 };
 
 // Update purchase status
+// Update purchase status
 const updatePurchaseStatus = async (req, res) => {
     try {
-        const { status } = req.body;
+        const { 
+            status, 
+            sp_amount, 
+            sp_paid_amount,
+            sp_referenceNumber,
+            sp_paymentDate,
+            sp_paymentMode,
+            sp_notes
+        } = req.body;
+        
         const { id } = req.params;
+        const userId = req.user._id; // Assuming user is authenticated
 
         // Validate status
         const validStatuses = ['pending', 'completed', 'cancelled', 'partially_paid', 'paid'];
@@ -731,32 +742,135 @@ const updatePurchaseStatus = async (req, res) => {
             });
         }
 
-        // Find and update purchase
-        const purchase = await Purchase.findByIdAndUpdate(
-            id,
-            { status },
-            { new: true }
-        )
-        .populate('vendorId', 'firstName lastName email phone')
-        .populate('userId', 'firstName lastName email')
-        .populate('billFrom', 'firstName lastName email profileImage phone')
-        .populate('billTo', 'firstName lastName email profileImage phone')
-        .populate({
-            path: 'items.id',
-            model: 'Product',
-            select: 'name sku description'
-        })
-        .populate({
-            path: 'bank',
-            model: 'BankDetail',
-            select: 'bankName accountNumber accountHoldername IFSCCode'
-        });
+        // Find the purchase
+        let purchase = await Purchase.findById(id)
+            .populate('vendorId', 'firstName lastName email phone')
+            .populate('userId', 'firstName lastName email')
+            .populate('billFrom', 'firstName lastName email profileImage phone')
+            .populate('billTo', 'firstName lastName email profileImage phone')
+            .populate({
+                path: 'items.id',
+                model: 'Product',
+                select: 'name sku description'
+            })
+            .populate({
+                path: 'bank',
+                model: 'BankDetail',
+                select: 'bankName accountNumber accountHoldername IFSCCode'
+            });
 
         if (!purchase) {
             return res.status(404).json({ 
                 success: false,
                 message: 'Purchase not found' 
             });
+        }
+
+        // Determine payment amounts based on status change
+        let paidAmount = purchase.paidAmount;
+        let balanceAmount = purchase.balanceAmount;
+        
+        if (status === 'paid' || status === 'partially_paid') {
+            if (sp_amount && sp_paid_amount) {
+                if (sp_paid_amount === sp_amount) {
+                    paidAmount = sp_paid_amount;
+                    balanceAmount = 0;
+                } else {
+                    paidAmount = sp_paid_amount;
+                    balanceAmount = sp_amount - sp_paid_amount;
+                }
+            } else if (status === 'paid') {
+                // If changing to paid without specific amounts, pay the full balance
+                paidAmount = purchase.totalAmount;
+                balanceAmount = 0;
+            }
+        }
+
+        // Update purchase
+        purchase.status = status;
+        purchase.paidAmount = paidAmount;
+        purchase.balanceAmount = balanceAmount;
+        
+        await purchase.save();
+
+        // Update purchase order status if purchaseOrderId exists
+        if (purchase.purchaseOrderId) {
+            await PurchaseOrder.findOneAndUpdate(
+                { purchaseOrderId: purchase.purchaseOrderId },
+                { 
+                    status: status === 'paid' ? 'completed' : 
+                           status === 'cancelled' ? 'cancelled' : 
+                           'pending' 
+                }
+            );
+        }
+
+        // Create or update supplier payment if status is paid or partially_paid
+        if (status === 'paid' || status === 'partially_paid') {
+            // Check if supplier payment already exists
+            let supplierPayment = await SupplierPayment.findOne({ purchaseId: purchase._id });
+
+            if (supplierPayment) {
+                // Update existing payment
+                supplierPayment.referenceNumber = sp_referenceNumber || supplierPayment.referenceNumber;
+                supplierPayment.paymentDate = sp_paymentDate || supplierPayment.paymentDate;
+                supplierPayment.paymentMode = sp_paymentMode || supplierPayment.paymentMode;
+                supplierPayment.amount = sp_amount || purchase.totalAmount;
+                supplierPayment.paidAmount = sp_paid_amount || paidAmount;
+                supplierPayment.dueAmount = balanceAmount;
+                supplierPayment.notes = sp_notes || supplierPayment.notes;
+                await supplierPayment.save();
+            } else {
+                // Create new payment
+                supplierPayment = new SupplierPayment({
+                    purchaseId: purchase._id,
+                    supplierId: purchase.billTo,
+                    referenceNumber: sp_referenceNumber || '',
+                    paymentDate: sp_paymentDate || new Date(),
+                    paymentMode: sp_paymentMode || purchase.paymentMode,
+                    amount: sp_amount || purchase.totalAmount,
+                    paidAmount: sp_paid_amount || paidAmount,
+                    dueAmount: balanceAmount,
+                    notes: sp_notes || '',
+                    createdBy: userId
+                });
+                await supplierPayment.save();
+            }
+        }
+
+        // Update inventory for each product ONLY if status is changed to 'paid'
+        if (status === 'paid' && purchase.status !== 'paid') {
+            for (const item of purchase.items) {
+                let inventory = await Inventory.findOne({ 
+                    productId: item.id, 
+                    userId: purchase.userId 
+                });
+
+                if (!inventory) {
+                    inventory = new Inventory({
+                        productId: item.id,
+                        userId: purchase.userId,
+                        quantity: 0
+                    });
+                }
+
+                // Update quantity
+                inventory.quantity += item.qty || 0;
+
+                // Add to inventory history
+                inventory.inventory_history.push({
+                    unitId: item.unit,
+                    quantity: inventory.quantity,
+                    notes: `Stock in from purchase ${purchase.purchaseId}`,
+                    type: 'stock_in',
+                    adjustment: item.qty || 0,
+                    referenceId: purchase._id,
+                    referenceType: 'purchase',
+                    createdBy: userId
+                });
+
+                await inventory.save();
+            }
         }
 
         // Format dates as "dd, MMM yyyy"
