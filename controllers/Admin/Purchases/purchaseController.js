@@ -30,7 +30,12 @@ const createPurchase = async (req, res) => {
       subTotal,
       totalTax,
       totalDiscount,
-      grandTotal
+      grandTotal,
+      sign_type,
+      signatureId,
+      signatureName,
+      checkNumber,
+      bank
     } = req.body;
 
     // Validate bill from and bill to users
@@ -45,6 +50,22 @@ const createPurchase = async (req, res) => {
       const product = await Product.findById(item.id);
       if (!product) {
         return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
+      }
+    }
+
+    // Validate signature type
+    const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
+    if (sign_type && !validSignatureTypes.includes(sign_type)) {
+      return res.status(400).json({ message: 'Invalid signature type' });
+    }
+
+    // Validate signature data if eSignature is selected
+    if (sign_type === 'eSignature') {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Signature image is required for eSignature' });
+      }
+      if (!signatureName) {
+        return res.status(400).json({ message: 'Signature name is required for eSignature' });
       }
     }
 
@@ -95,6 +116,11 @@ const createPurchase = async (req, res) => {
       bank: req.body.bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',
+      sign_type: sign_type || 'none',
+      signatureId: signatureId || null,
+      signatureImage: sign_type === 'eSignature' ? req.file.path : null,
+      signatureName: sign_type === 'eSignature' ? signatureName : null,
+      checkNumber: checkNumber || null,
       userId,
       billFrom,
       billTo
@@ -114,8 +140,7 @@ const createPurchase = async (req, res) => {
       );
     }
 
-    // Update inventory for each product if status is 'completed'
-   
+    // Update inventory for each product
     for (const item of items) {
       let inventory = await Inventory.findOne({ 
         productId: item.id, 
@@ -160,7 +185,21 @@ const createPurchase = async (req, res) => {
           totalAmount: purchase.totalAmount,
           paidAmount: purchase.paidAmount,
           balanceAmount: purchase.balanceAmount,
-          items: purchase.items
+          sign_type: purchase.sign_type,
+          signatureName: purchase.signatureName,
+          items: purchase.items.map(item => ({
+            id: item.id,
+            name: item.name,
+            unit: item.unit,
+            qty: item.qty,
+            rate: item.rate,
+            discount: item.discount,
+            tax: item.tax,
+            tax_group_id: item.tax_group_id,
+            discount_type: item.discount_type,
+            discount_value: item.discount_value,
+            amount: item.amount
+          }))
         }
       }
     });
@@ -175,25 +214,196 @@ const createPurchase = async (req, res) => {
 
 // Get all purchases
 const getAllPurchases = async (req, res) => {
-  try {
-    const purchases = await Purchase.find({ isDeleted: false })
-      .populate('vendorId', 'name email')
-      .populate('userId', 'name email')
-      .populate('billFrom', 'name email')
-      .populate('billTo', 'name email')
-      .sort({ purchaseDate: -1 });
+    try {
+        const { 
+            page = 1, 
+            limit = 10, 
+            status, 
+            search = '',
+            vendorId,
+            startDate,
+            endDate
+        } = req.query;
 
-    res.status(200).json({
-      message: 'Purchases retrieved successfully',
-      data: purchases
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ 
-      message: 'Error retrieving purchases',
-      error: err.message
-    });
-  }
+        const skip = (page - 1) * limit;
+
+        // Build query
+        const query = { 
+            isDeleted: false 
+        };
+
+        // Add status filter
+        if (status && ['pending', 'completed', 'cancelled', 'partially_paid', 'paid'].includes(status)) {
+            query.status = status;
+        }
+
+        // Add vendor filter
+        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
+            query.vendorId = vendorId;
+        }
+
+        // Add date range filter
+        if (startDate || endDate) {
+            query.purchaseDate = {};
+            if (startDate) {
+                query.purchaseDate.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                query.purchaseDate.$lte = new Date(endDate);
+            }
+        }
+
+        // Add search filter
+        if (search) {
+            query.$or = [
+                { purchaseId: { $regex: search, $options: 'i' } },
+                { purchaseOrderId: { $regex: search, $options: 'i' } },
+                { referenceNo: { $regex: search, $options: 'i' } },
+                { notes: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Get total count
+        const total = await Purchase.countDocuments(query);
+
+        // Get purchases with pagination
+        const purchases = await Purchase.find(query)
+            .populate('vendorId', 'firstName lastName email phone')
+            .populate('userId', 'firstName lastName email')
+            .populate('billFrom', 'firstName lastName email profileImage phone')
+            .populate('billTo', 'firstName lastName email profileImage phone')
+            .populate({
+                path: 'bank',
+                model: 'BankDetail',
+                select: 'bankName accountNumber accountHoldername IFSCCode'
+            })
+            .sort({ purchaseDate: -1 })
+            .skip(skip)
+            .limit(Number(limit));
+
+        const formattedPurchases = await Promise.all(purchases.map(async (purchase) => {
+            const baseUrl = `${req.protocol}://${req.get('host')}/`;
+            const signatureImage = purchase.signatureImage 
+                ? `${baseUrl}${purchase.signatureImage.replace(/\\/g, '/')}`
+                : null;
+
+            // Format dates as "dd, MMM yyyy"
+            const formatDate = (date) => {
+                if (!date) return null;
+                const d = new Date(date);
+                const day = d.getDate().toString().padStart(2, '0');
+                const month = d.toLocaleString('default', { month: 'short' });
+                const year = d.getFullYear();
+                return `${day}, ${month} ${year}`;
+            };
+
+            // Vendor details
+            const vendorDetails = purchase.vendorId ? {
+                id: purchase.vendorId._id,
+                name: `${purchase.vendorId.firstName || ''} ${purchase.vendorId.lastName || ''}`.trim(),
+                email: purchase.vendorId.email || null,
+                phone: purchase.vendorId.phone || null
+            } : null;
+
+            // User details (who created the purchase)
+            const userDetails = purchase.userId ? {
+                id: purchase.userId._id,
+                name: `${purchase.userId.firstName || ''} ${purchase.userId.lastName || ''}`.trim(),
+                email: purchase.userId.email || null
+            } : null;
+
+            // BillFrom details
+            const billFromDetails = purchase.billFrom ? {
+                id: purchase.billFrom._id,
+                name: `${purchase.billFrom.firstName || ''} ${purchase.billFrom.lastName || ''}`.trim(),
+                email: purchase.billFrom.email || null,
+                phone: purchase.billFrom.phone || null,
+                profileImage: purchase.billFrom.profileImage 
+                    ? `${baseUrl}${purchase.billFrom.profileImage.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
+            } : null;
+
+            // BillTo details
+            const billToDetails = purchase.billTo ? {
+                id: purchase.billTo._id,
+                name: `${purchase.billTo.firstName || ''} ${purchase.billTo.lastName || ''}`.trim(),
+                email: purchase.billTo.email || null,
+                phone: purchase.billTo.phone || null,
+                profileImage: purchase.billTo.profileImage 
+                    ? `${baseUrl}${purchase.billTo.profileImage.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
+            } : null;
+
+            // Bank details
+            const bankDetails = purchase.bank ? {
+                id: purchase.bank._id,
+                name: purchase.bank.bankName || null,
+                accountNumber: purchase.bank.accountNumber || null,
+                accountHolderName: purchase.bank.accountHoldername || null,
+                ifscCode: purchase.bank.IFSCCode || null
+            } : null;
+
+            // Signature details
+            const signatureDetails = purchase.sign_type === 'eSignature' ? {
+                name: purchase.signatureName || null,
+                image: signatureImage
+            } : purchase.signatureId ? {
+                id: purchase.signatureId._id,
+                name: purchase.signatureId.signatureName || null
+            } : null;
+
+            return {
+                id: purchase._id,
+                purchaseId: purchase.purchaseId,
+                purchaseOrderId: purchase.purchaseOrderId,
+                vendor: vendorDetails,
+                user: userDetails,
+                purchaseDate: formatDate(purchase.purchaseDate),
+                dueDate: formatDate(purchase.dueDate),
+                referenceNo: purchase.referenceNo,
+                status: purchase.status,
+                paymentMode: purchase.paymentMode,
+                taxableAmount: purchase.taxableAmount,
+                totalDiscount: purchase.totalDiscount,
+                totalTax: purchase.totalTax,
+                totalAmount: purchase.totalAmount,
+                paidAmount: purchase.paidAmount,
+                balanceAmount: purchase.balanceAmount,
+                itemsCount: purchase.items.length,
+                billFrom: billFromDetails,
+                billTo: billToDetails,
+                notes: purchase.notes,
+                termsAndCondition: purchase.termsAndCondition,
+                sign_type: purchase.sign_type,
+                signature: signatureDetails,
+                bank: bankDetails,
+                checkNumber: purchase.checkNumber,
+                createdAt: formatDate(purchase.createdAt),
+                updatedAt: formatDate(purchase.updatedAt)
+            };
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: 'Purchases retrieved successfully',
+            data: {
+                purchases: formattedPurchases,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error('Get all purchases error:', err);
+        res.status(500).json({
+            message: 'Error fetching purchases',
+            error: err.message
+        });
+    }
 };
 
 // Get purchase by ID
