@@ -569,6 +569,11 @@ const getPurchaseById = async (req, res) => {
                 path: 'paymentMode',
                 model: 'PaymentMode',
                 select: 'name slug status'
+            })
+            .populate({
+                path: 'signatureId',
+                model: 'Signature',
+                select: 'signatureName signatureImage createdAt'
             });
 
         if (!purchase) {
@@ -579,10 +584,7 @@ const getPurchaseById = async (req, res) => {
         }
 
         const baseUrl = `${req.protocol}://${req.get('host')}/`;
-        const signatureImage = purchase.signatureImage 
-            ? `${baseUrl}${purchase.signatureImage.replace(/\\/g, '/')}`
-            : null;
-
+        
         // Format dates as "dd, MMM yyyy"
         const formatDate = (date) => {
             if (!date) return null;
@@ -591,6 +593,16 @@ const getPurchaseById = async (req, res) => {
             const month = d.toLocaleString('default', { month: 'short' });
             const year = d.getFullYear();
             return `${day}, ${month} ${year}`;
+        };
+
+        // Unformat date (convert from "dd, MMM yyyy" to Date object)
+        const unformatDate = (formattedDate) => {
+            if (!formattedDate) return null;
+            const parts = formattedDate.split(', ');
+            if (parts.length !== 2) return null;
+            const day = parts[0];
+            const [month, year] = parts[1].split(' ');
+            return new Date(`${month} ${day}, ${year}`);
         };
 
         // Vendor details
@@ -650,13 +662,28 @@ const getPurchaseById = async (req, res) => {
         } : null;
 
         // Signature details
-        const signatureDetails = purchase.sign_type === 'eSignature' ? {
-            name: purchase.signatureName || null,
-            image: signatureImage
-        } : purchase.signatureId ? {
-            id: purchase.signatureId._id,
-            name: purchase.signatureId.signatureName || null
-        } : null;
+        let signatureDetails = null;
+        if (purchase.sign_type === 'eSignature') {
+            const signatureImage = purchase.signatureImage 
+                ? `${baseUrl}${purchase.signatureImage.replace(/\\/g, '/')}`
+                : null;
+            signatureDetails = {
+                name: purchase.signatureName || null,
+                image: signatureImage,
+                type: 'eSignature'
+            };
+        } else if (purchase.signatureId) {
+            const signatureImage = purchase.signatureId.signatureImage 
+                ? `${baseUrl}${purchase.signatureId.signatureImage.replace(/\\/g, '/')}`
+                : null;
+            signatureDetails = {
+                id: purchase.signatureId._id,
+                name: purchase.signatureId.signatureName || null,
+                image: signatureImage,
+                createdAt: purchase.signatureId.createdAt,
+                type: 'digitalSignature'
+            };
+        }
 
         // Format items with product details
         const formattedItems = purchase.items.map(item => ({
@@ -710,8 +737,8 @@ const getPurchaseById = async (req, res) => {
             bank: bankDetails,
             checkNumber: purchase.checkNumber,
             roundOff: purchase.roundOff,
-            createdAt: formatDate(purchase.createdAt),
-            updatedAt: formatDate(purchase.updatedAt)
+            createdAt: purchase.createdAt,
+            updatedAt: purchase.updatedAt
         };
 
         res.status(200).json({
@@ -729,7 +756,6 @@ const getPurchaseById = async (req, res) => {
     }
 };
 
-// Update purchase status
 // Update purchase status
 const updatePurchaseStatus = async (req, res) => {
     try {
