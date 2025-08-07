@@ -77,7 +77,7 @@ const purchaseSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['pending', 'completed', 'cancelled', 'partially_paid', 'paid'],
+    enum: ['new', 'pending', 'completed', 'cancelled', 'partially_paid', 'paid'],
     default: 'pending'
   },
   paymentMode: {

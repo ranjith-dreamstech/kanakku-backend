@@ -16,7 +16,6 @@ const createPurchase = async (req, res) => {
     }
 
     const { 
-      purchaseOrderId,
       userId,
       billFrom,
       billTo,
@@ -84,6 +83,13 @@ const createPurchase = async (req, res) => {
 
     const calculatedGrandTotal = grandTotal || (calculatedSubTotal + calculatedTotalTax - calculatedTotalDiscount);
 
+    // Generate purchaseOrderId if not provided
+    let purchaseOrderId = req.body.purchaseOrderId;
+    if (!purchaseOrderId) {
+      const count = await PurchaseOrder.countDocuments();
+      purchaseOrderId = `PO-${String(count + 1).padStart(6, '0')}`;
+    }
+
     // Create purchase
     const purchase = new Purchase({
       purchaseOrderId,
@@ -138,7 +144,9 @@ const createPurchase = async (req, res) => {
       );
     }
 
-    // Update inventory for each product
+
+     // Update inventory for each product if status is 'completed'
+
     for (const item of items) {
       let inventory = await Inventory.findOne({ 
         productId: item.id, 
