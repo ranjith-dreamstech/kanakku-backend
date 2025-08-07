@@ -29,10 +29,10 @@ const debitNoteSchema = new mongoose.Schema({
     default: ""
   },
   items: [{
-    productId: {
+    id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
-      required: true
+      required: false
     },
     name: {
       type: String,
@@ -42,9 +42,9 @@ const debitNoteSchema = new mongoose.Schema({
       type: String,
       required: false
     },
-    quantity: {
+    qty: {
       type: Number,
-      required: true
+      required: false
     },
     rate: {
       type: Number,
@@ -75,10 +75,6 @@ const debitNoteSchema = new mongoose.Schema({
       type: Number,
       required: true
     },
-    reason: {
-      type: String,
-      required: true
-    }
   }],
   status: {
     type: String,

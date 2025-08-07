@@ -14,6 +14,7 @@ const createDebitNote = async (req, res) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
+    const userId = req.user;
 
     const { 
       purchaseId,
@@ -23,8 +24,7 @@ const createDebitNote = async (req, res) => {
       notes,
       termsAndCondition,
       status = 'draft',
-      userId,
-      createdBy,
+      createdBy = userId,
       billFrom,
       billTo,
       sign_type,
@@ -55,16 +55,16 @@ const createDebitNote = async (req, res) => {
     }
 
     // Validate created by user
-    const createdByUser = await User.findById(createdBy);
-    if (!createdByUser) {
-      return res.status(422).json({ message: 'Invalid created by user ID' });
-    }
+    // const createdByUser = await User.findById(createdBy);
+    // if (!createdByUser) {
+    //   return res.status(422).json({ message: 'Invalid created by user ID' });
+    // }
 
     // Validate products in items
     for (const item of items) {
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.id);
       if (!product) {
-        return res.status(422).json({ message: `Invalid product ID: ${item.productId}` });
+        return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
       }
     }
 
@@ -108,10 +108,10 @@ const createDebitNote = async (req, res) => {
       dueDate: new Date(debitNoteDate ? new Date(debitNoteDate) : new Date()),
       referenceNo: referenceNo || '',
       items: items.map(item => ({
-        productId: item.productId,
+        productId: item.id,
         name: item.name,
         unit: item.unit,
-        quantity: item.quantity,
+        quantity: item.qty,
         rate: item.rate,
         discount: item.discount,
         tax: item.tax,
@@ -119,15 +119,14 @@ const createDebitNote = async (req, res) => {
         discount_type: item.discount_type,
         discount_value: item.discount_value,
         amount: item.amount || (item.quantity * item.rate),
-        reason: item.reason
       })),
       status,
-      taxableAmount,
-      totalDiscount,
-      totalTax,
-      totalAmount,
+      taxableAmount: req.body.subTotal || taxableAmount,
+      totalDiscount: req.body.totalDiscount || totalDiscount,
+      totalTax: req.body.totalTax || totalTax,
+      totalAmount: req.body.grandTotal || totalAmount,
       paidAmount,
-      balanceAmount,
+      balanceAmount: 0,
       bank: bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',

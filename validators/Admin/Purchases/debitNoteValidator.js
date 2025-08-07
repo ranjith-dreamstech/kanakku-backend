@@ -13,11 +13,11 @@ const debitNoteValidator = [
   body('items')
     .isArray({ min: 1 }).withMessage('At least one item is required'),
   
-  body('items.*.productId')
+  body('items.*.id')
     .notEmpty().withMessage('Product ID is required')
     .isMongoId().withMessage('Invalid product ID format'),
   
-  body('items.*.quantity')
+  body('items.*.qty')
     .notEmpty().withMessage('Quantity is required')
     .isNumeric().withMessage('Quantity must be a number')
     .toFloat(),
@@ -27,17 +27,17 @@ const debitNoteValidator = [
     .isNumeric().withMessage('Rate must be a number')
     .toFloat(),
   
-  body('items.*.reason')
-    .notEmpty().withMessage('Reason is required')
-    .isString().withMessage('Reason must be a string'),
+  // body('items.*.reason')
+  //   .notEmpty().withMessage('Reason is required')
+  //   .isString().withMessage('Reason must be a string'),
   
   body('userId')
     .notEmpty().withMessage('User ID is required')
     .isMongoId().withMessage('Invalid user ID format'),
   
-  body('createdBy')
-    .notEmpty().withMessage('Created by user ID is required')
-    .isMongoId().withMessage('Invalid created by user ID format'),
+  // body('createdBy')
+  //   .notEmpty().withMessage('Created by user ID is required')
+  //   .isMongoId().withMessage('Invalid created by user ID format'),
   
   // Optional fields
   body('referenceNo').optional().isString(),
