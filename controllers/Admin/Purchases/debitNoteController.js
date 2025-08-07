@@ -175,38 +175,120 @@ const createDebitNote = async (req, res) => {
 // Get all debit notes
 const getAllDebitNotes = async (req, res) => {
   try {
-    const { status, vendorId, startDate, endDate } = req.query;
-    const userId = req.user;
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      vendorId,
+      startDate,
+      endDate,
+      search = ''
+    } = req.query;
 
+    const skip = (page - 1) * limit;
+
+    // Build query
     let query = { isDeleted: false };
 
     if (status) {
       query.status = status;
     }
 
-    if (vendorId) {
+    if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
       query.vendorId = vendorId;
     }
 
-    if (startDate && endDate) {
-      query.debitNoteDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
+    if (startDate || endDate) {
+      query.debitNoteDate = {};
+      if (startDate) {
+        query.debitNoteDate.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        query.debitNoteDate.$lte = new Date(endDate);
+      }
     }
 
-    const debitNotes = await DebitNote.find(query)
-      .populate('vendorId', 'name email')
-      .populate('purchaseId', 'purchaseId purchaseDate')
-      .sort({ debitNoteDate: -1 });
+    // Add search filter
+    if (search) {
+      query.$or = [
+        { debitNoteId: { $regex: search, $options: 'i' } },
+        { reason: { $regex: search, $options: 'i' } },
+        { referenceNo: { $regex: search, $options: 'i' } },
+        { notes: { $regex: search, $options: 'i' } }
+      ];
+    }
 
-    res.status(200).json({
-      message: 'Debit notes retrieved successfully',
-      data: debitNotes
+    // Get total count
+    const total = await DebitNote.countDocuments(query);
+
+    // Fetch debit notes
+    const debitNotes = await DebitNote.find(query)
+      .populate('vendorId', 'firstName lastName email phone')
+      .populate('purchaseId', 'purchaseId purchaseDate totalAmount')
+      .sort({ debitNoteDate: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    // Format function for date
+    const formatDate = (date) => {
+      if (!date) return null;
+      const d = new Date(date);
+      const day = d.getDate().toString().padStart(2, '0');
+      const month = d.toLocaleString('default', { month: 'short' });
+      const year = d.getFullYear();
+      return `${day}, ${month} ${year}`;
+    };
+
+    // Format response
+    const formattedDebitNotes = debitNotes.map((note) => {
+      const vendor = note.vendorId ? {
+        id: note.vendorId._id,
+        name: `${note.vendorId.firstName || ''} ${note.vendorId.lastName || ''}`.trim(),
+        email: note.vendorId.email || null,
+        phone: note.vendorId.phone || null
+      } : null;
+
+      const purchase = note.purchaseId ? {
+        id: note.purchaseId._id,
+        purchaseId: note.purchaseId.purchaseId || null,
+        purchaseDate: formatDate(note.purchaseId.purchaseDate),
+        totalAmount: note.purchaseId.totalAmount || 0
+      } : null;
+
+      return {
+        id: note._id,
+        debitNoteId: note.debitNoteId,
+        referenceNo: note.referenceNo || null,
+        vendor,
+        purchase,
+        debitNoteDate: formatDate(note.debitNoteDate),
+        reason: note.reason,
+        status: note.status,
+        totalAmount: note.totalAmount,
+        notes: note.notes || null,
+        createdAt: formatDate(note.createdAt),
+        updatedAt: formatDate(note.updatedAt)
+      };
     });
+
+    // Send response
+    res.status(200).json({
+      success: true,
+      message: 'Debit notes retrieved successfully',
+      data: {
+        debitNotes: formattedDebitNotes,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / limit)
+        }
+      }
+    });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ 
+    console.error('Get all debit notes error:', err);
+    res.status(500).json({
       message: 'Error retrieving debit notes',
       error: err.message
     });
@@ -219,8 +301,8 @@ const getDebitNoteById = async (req, res) => {
     const { id } = req.params;
     const userId = req.user; // Assuming user is authenticated
 
-    const debitNote = await DebitNote.findOne({ _id: id, userId, isDeleted: false })
-      .populate('vendorId', 'name email phone address')
+    const debitNote = await DebitNote.findOne({ _id: id, isDeleted: false })
+      .populate('vendorId', 'firstName lastName email phone address')
       .populate('purchaseId', 'purchaseId purchaseDate totalAmount')
       .populate('items.productId', 'name sku barcode')
       .populate('items.tax_group_id', 'name rate');
@@ -229,12 +311,76 @@ const getDebitNoteById = async (req, res) => {
       return res.status(404).json({ message: 'Debit note not found' });
     }
 
+    const formatDate = (date) => {
+      if (!date) return null;
+      const d = new Date(date);
+      const day = d.getDate().toString().padStart(2, '0');
+      const month = d.toLocaleString('default', { month: 'short' });
+      const year = d.getFullYear();
+      return `${day}, ${month} ${year}`;
+    };
+
+    // Vendor details
+    const vendor = debitNote.vendorId ? {
+      id: debitNote.vendorId._id,
+      name: `${debitNote.vendorId.firstName || ''} ${debitNote.vendorId.lastName || ''}`.trim(),
+      email: debitNote.vendorId.email || null,
+      phone: debitNote.vendorId.phone || null,
+      address: debitNote.vendorId.address || null
+    } : null;
+
+    // Purchase details
+    const purchase = debitNote.purchaseId ? {
+      id: debitNote.purchaseId._id,
+      purchaseId: debitNote.purchaseId.purchaseId || null,
+      purchaseDate: formatDate(debitNote.purchaseId.purchaseDate),
+      totalAmount: debitNote.purchaseId.totalAmount || 0
+    } : null;
+
+    // Items
+    const items = debitNote.items.map(item => ({
+      product: item.productId ? {
+        id: item.productId._id,
+        name: item.productId.name || null,
+        sku: item.productId.sku || null,
+        barcode: item.productId.barcode || null
+      } : null,
+      quantity: item.quantity || 0,
+      rate: item.rate || 0,
+      discount: item.discount || 0,
+      amount: item.amount || 0,
+      taxGroup: item.tax_group_id ? {
+        id: item.tax_group_id._id,
+        name: item.tax_group_id.name || null,
+        rate: item.tax_group_id.rate || 0
+      } : null
+    }));
+
+    // Final formatted response
+    const formattedDebitNote = {
+      id: debitNote._id,
+      debitNoteId: debitNote.debitNoteId,
+      referenceNo: debitNote.referenceNo || null,
+      vendor,
+      purchase,
+      debitNoteDate: formatDate(debitNote.debitNoteDate),
+      reason: debitNote.reason || null,
+      status: debitNote.status || null,
+      totalAmount: debitNote.totalAmount || 0,
+      notes: debitNote.notes || null,
+      items,
+      createdAt: formatDate(debitNote.createdAt),
+      updatedAt: formatDate(debitNote.updatedAt)
+    };
+
     res.status(200).json({
+      success: true,
       message: 'Debit note retrieved successfully',
-      data: debitNote
+      data: formattedDebitNote
     });
+
   } catch (err) {
-    console.error(err);
+    console.error('Get debit note by ID error:', err);
     res.status(500).json({ 
       message: 'Error retrieving debit note',
       error: err.message
