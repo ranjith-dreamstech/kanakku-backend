@@ -84,10 +84,10 @@ const createPurchase = async (req, res) => {
     const calculatedGrandTotal = grandTotal || (calculatedSubTotal + calculatedTotalTax - calculatedTotalDiscount);
 
     // Generate purchaseOrderId if not provided
-    let purchaseOrderId = req.body.purchaseOrderId;
-    if (!purchaseOrderId) {
+    let purchaseId = req.body.purchaseId;
+    if (!purchaseId) {
       const count = await PurchaseOrder.countDocuments();
-      purchaseOrderId = `PO-${String(count + 1).padStart(6, '0')}`;
+      purchaseId = `PO-${String(count + 1).padStart(6, '0')}`;
     }
 
     // Create purchase
