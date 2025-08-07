@@ -17,36 +17,21 @@ const createPurchase = async (req, res) => {
 
     const { 
       purchaseOrderId,
-      vendorId,
-      purchaseDate,
-      dueDate,
-      referenceNo,
-      items,
-      paymentMode,
-      notes,
-      termsAndCondition,
       userId,
       billFrom,
       billTo,
+      referenceNo,
+      purchaseDate,
+      status = 'pending',
+      items,
+      notes,
+      termsAndCondition,
+      paymentMode,
+      subTotal,
+      totalTax,
+      totalDiscount,
       grandTotal
     } = req.body;
-    // Validate purchase order exists
-    // const purchaseOrder = await PurchaseOrder.findOne({ purchaseOrderId });
-    // if (!purchaseOrder) {
-    //   return res.status(400).json({ message: 'Invalid purchase order ID' });
-    // }
-
-    // Validate vendor exists and is a supplier
-    // const vendor = await User.findById(vendorId);
-    // if (!vendor || vendor.user_type !== 'supplier') {
-    //   return res.status(400).json({ message: 'Invalid vendor ID or vendor is not a supplier' });
-    // }
-
-    // Validate requesting user exists
-    // const user = await User.findById(userId);
-    // if (!user) {
-    //   return res.status(422).json({ message: 'Invalid user ID' });
-    // }
 
     // Validate bill from and bill to users
     const billFromUser = await User.findById(billFrom);
@@ -63,32 +48,30 @@ const createPurchase = async (req, res) => {
       }
     }
 
-    // Calculate amounts
-    let taxableAmount = 0;
-    let totalDiscount = 0;
-    let totalTax = 0;
-    let totalAmount = 0;
+    // Calculate amounts if not provided in payload
+    const calculatedSubTotal = subTotal || items.reduce((sum, item) => {
+      return sum + (item.amount || (item.quantity * (item.rate || 0)));
+    }, 0);
 
-    items.forEach(item => {
-      const itemAmount = item.amount || (item.quantity * (item.rate || 0));
-      const itemDiscount = item.discount || 0;
-      const itemTax = item.tax || 0;
-      
-      taxableAmount += itemAmount;
-      totalDiscount += itemDiscount;
-      totalTax += itemTax;
-      totalAmount += itemAmount;
-    });
+    const calculatedTotalDiscount = totalDiscount || items.reduce((sum, item) => {
+      return sum + (item.discount || 0);
+    }, 0);
+
+    const calculatedTotalTax = totalTax || items.reduce((sum, item) => {
+      return sum + (item.tax || 0);
+    }, 0);
+
+    const calculatedGrandTotal = grandTotal || (calculatedSubTotal + calculatedTotalTax - calculatedTotalDiscount);
 
     // Create purchase
     const purchase = new Purchase({
       purchaseOrderId,
-      vendorId,
-      purchaseDate: new Date(purchaseDate),
-      dueDate: new Date(dueDate || purchaseDate),
+      vendorId: billTo, // Assuming billTo is the vendor/supplier
+      purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
+      dueDate: new Date(purchaseDate ? new Date(purchaseDate) : new Date()), // Same as purchase date if not specified
       referenceNo: referenceNo || '',
       items: items.map(item => ({
-        productId: item.productId,
+        productId: item.id,
         name: item.name,
         unit: item.unit,
         quantity: item.quantity,
@@ -100,7 +83,7 @@ const createPurchase = async (req, res) => {
         discount_value: item.discount_value,
         amount: item.amount
       })),
-      status: 'pending',
+      status: status,
       paymentMode,
       taxableAmount: req.body.taxableAmount || taxableAmount,
       totalDiscount: req.body.totalDiscount || totalDiscount,
@@ -108,7 +91,7 @@ const createPurchase = async (req, res) => {
       roundOff: req.body.roundOff || false,
       totalAmount: req.body.totalAmount || totalAmount,
       paidAmount: grandTotal || 0,
-      balanceAmount: 0,
+      balanceAmount: grandTotal ? (calculatedGrandTotal - grandTotal) : calculatedGrandTotal,
       bank: req.body.bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',
@@ -119,13 +102,20 @@ const createPurchase = async (req, res) => {
 
     await purchase.save();
 
-    // Update purchase order status
-    await PurchaseOrder.findOneAndUpdate(
-      { purchaseOrderId },
-      { status: 'completed' }
-    );
+    // Update purchase order status if purchaseOrderId exists
+    if (purchaseOrderId) {
+      await PurchaseOrder.findOneAndUpdate(
+        { purchaseOrderId },
+        { 
+          status: status === 'completed' ? 'completed' : 
+                 status === 'cancelled' ? 'cancelled' : 
+                 'pending' 
+        }
+      );
+    }
 
-    // Update inventory for each product
+    // Update inventory for each product if status is 'completed'
+   
     for (const item of items) {
       let inventory = await Inventory.findOne({ 
         productId: item.id, 
@@ -141,7 +131,7 @@ const createPurchase = async (req, res) => {
       }
 
       // Update quantity
-      inventory.quantity += item.qty;
+      inventory.quantity += item.quantity || item.qty || 0;
 
       // Add to inventory history
       inventory.inventory_history.push({
@@ -149,7 +139,7 @@ const createPurchase = async (req, res) => {
         quantity: inventory.quantity,
         notes: `Stock in from purchase ${purchase.purchaseId}`,
         type: 'stock_in',
-        adjustment: item.qty,
+        adjustment: item.quantity || item.qty || 0,
         referenceId: purchase._id,
         referenceType: 'purchase',
         createdBy: userId
