@@ -16,6 +16,7 @@ const createPurchase = async (req, res) => {
     }
 
     const { 
+      purchaseOrderId,
       userId,
       billFrom,
       billTo,
