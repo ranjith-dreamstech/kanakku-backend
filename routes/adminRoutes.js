@@ -111,6 +111,7 @@ router.post('/purchases', protect, upload.single('signatureImage'), purchaseVali
 router.get('/purchases', protect, purchaseController.getAllPurchases);
 router.get('/purchases/:id', protect, purchaseController.getPurchaseById);
 router.delete('/purchases/:id', protect, purchaseController.deletePurchase);
+router.get('/supplierpayments', protect, purchaseController.getSupplierPayments);
 //purchaseOrder
 router.post('/purchase-order', protect, upload.single('signatureImage'), purchaseOrderValidator, purchaseOrderController.createPurchaseOrder);
 router.get('/purchase-orders', protect, purchaseOrderController.listPurchaseOrders);
