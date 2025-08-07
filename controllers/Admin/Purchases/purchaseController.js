@@ -155,13 +155,13 @@ const createPurchase = async (req, res) => {
       const supplierPayment = new SupplierPayment({
         purchaseId: purchase._id,
         supplierId: billTo,
-        referenceNumber: referenceNo || '',
-        paymentDate: purchase.purchaseDate,
-        paymentMode: paymentMode,
-        amount: calculatedGrandTotal,
-        paidAmount: calculatedPaidAmount,
-        dueAmount: calculatedDueAmount,
-        notes: notes || '',
+        referenceNumber: req.body.sp_referenceNumber || '',
+        paymentDate: req.body.sp_paymentDate || '',
+        paymentMode: req.body.sp_paymentMode || '',
+        amount: req.body.sp_amount || '',
+        paidAmount: req.body.sp_amount || '',
+        dueAmount: req.body.sp_due_amount || '',
+        notes: sp_notes  || '',
         createdBy: userId
       });
 
