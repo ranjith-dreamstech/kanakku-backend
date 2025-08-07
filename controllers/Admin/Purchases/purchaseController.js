@@ -328,7 +328,7 @@ const getAllPurchases = async (req, res) => {
                 model: 'BankDetail',
                 select: 'bankName accountNumber accountHoldername IFSCCode'
             })
-            .sort({ purchaseDate: -1 })
+            .sort({ createdAt: -1 })  // Changed from purchaseDate to createdAt for descending order
             .skip(skip)
             .limit(Number(limit));
 
