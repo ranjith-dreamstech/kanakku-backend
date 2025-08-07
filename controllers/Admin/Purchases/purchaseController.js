@@ -86,11 +86,11 @@ const createPurchase = async (req, res) => {
     const calculatedGrandTotal = grandTotal || (calculatedSubTotal + calculatedTotalTax - calculatedTotalDiscount);
     
     // Determine status based on payment amounts
-    let status = 'pending';
+    let status = req.body.status || 'pending';
     let paidAmount = 0;
     let balanceAmount = calculatedGrandTotal;
     
-    if (sp_amount && sp_paid_amount) {
+    if (sp_amount && sp_paid_amount && status === 'paid') {
       if (sp_paid_amount === sp_amount) {
         status = 'paid';
         paidAmount = sp_paid_amount;
@@ -167,6 +167,7 @@ const createPurchase = async (req, res) => {
 
     // Create supplier payment if status is paid or partially_paid
     if (status === 'paid' || status === 'partially_paid') {
+      console.log('here test');
       const supplierPayment = new SupplierPayment({
         purchaseId: purchase._id,
         supplierId: billTo,
