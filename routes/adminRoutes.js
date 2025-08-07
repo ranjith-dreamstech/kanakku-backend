@@ -99,12 +99,15 @@ router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
 //debitnote
 router.post('/debitnote', protect, upload.single('signatureImage'), debitNoteValidator, debitNoteController.createDebitNote);
 router.get('/debitnote', protect, debitNoteController.getAllDebitNotes);
-router.get('/debitnote/:id', protect, debitNoteController.getDebitNoteById);
+router.put('/debitnote', protect, upload.single('signatureImage'), debitNoteController.createDebitNote);
+router.get('/debitnote/:id', protect,  debitNoteController.getDebitNoteById);
 router.delete('/debitnote/:id', protect, debitNoteController.deleteDebitNote);
 
 //supplierpayment
 router.post('/supplierpayments', protect, upload.single('attachment'), supplierPaymentValidator, supplierPaymentController.createSupplierPayment);
-router.get('/supplierpayments', protect, purchaseController.getSupplierPayments);
+router.get('/supplierpayments', protect, supplierPaymentController.listSupplierPayments);
+router.put('/supplierpayments', protect, upload.single('attachment'), supplierPaymentController.updateSupplierPayment);
+router.delete('/supplierpayments', protect, supplierPaymentController.deleteSupplierPayment);
 
 
 //purchase
