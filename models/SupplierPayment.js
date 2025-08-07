@@ -9,20 +9,12 @@ const supplierPaymentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Purchase',
     required: true
-  },
-  purchaseOrderId: {
-    type: String,
-    required: true
-  },
+  },  
   supplierId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  },
-  invoiceId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Invoice'
-  },
+  },  
   referenceNumber: {
     type: String
   },
@@ -39,12 +31,16 @@ const supplierPaymentSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  status: {
-    type: String,
-    enum: ['pending', 'completed', 'failed', 'refunded'],
-    default: 'completed'
+   paidAmount: {
+    type: Number,
+    required: true
+  },
+  dueAmount: {
+    type: Number,
+    required: true
   },
   notes: String,
+  attachment: String,
   isDeleted: {
     type: Boolean,
     default: false

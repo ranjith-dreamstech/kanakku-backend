@@ -31,6 +31,7 @@ const createPurchase = async (req, res) => {
       totalTax,
       totalDiscount,
       grandTotal,
+      paidAmount = 0,
       sign_type,
       signatureId,
       signatureName,
@@ -83,6 +84,8 @@ const createPurchase = async (req, res) => {
     }, 0);
 
     const calculatedGrandTotal = grandTotal || (calculatedSubTotal + calculatedTotalTax - calculatedTotalDiscount);
+    const calculatedPaidAmount = status === 'paid' ? calculatedGrandTotal : paidAmount;
+    const calculatedDueAmount = calculatedGrandTotal - calculatedPaidAmount;
 
     // Generate purchaseOrderId if not provided
     let purchaseId = req.body.purchaseId;
@@ -118,6 +121,8 @@ const createPurchase = async (req, res) => {
       totalTax: req.body.totalTax || totalTax,
       roundOff: req.body.roundOff || false,
       totalAmount: req.body.grandTotal || totalAmount,
+      paidAmount: calculatedPaidAmount,
+      balanceAmount: calculatedDueAmount,
       bank: req.body.bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',
@@ -145,7 +150,25 @@ const createPurchase = async (req, res) => {
       );
     }
 
-    // Update inventory for each product ONLY if status is 'paid'
+    // Create supplier payment if status is paid or partially_paid
+    if (status === 'paid' || status === 'partially_paid') {
+      const supplierPayment = new SupplierPayment({
+        purchaseId: purchase._id,
+        supplierId: billTo,
+        referenceNumber: referenceNo || '',
+        paymentDate: purchase.purchaseDate,
+        paymentMode: paymentMode,
+        amount: calculatedGrandTotal,
+        paidAmount: calculatedPaidAmount,
+        dueAmount: calculatedDueAmount,
+        notes: notes || '',
+        createdBy: userId
+      });
+
+      await supplierPayment.save();
+    }
+
+    // Update inventory for each product ONLY if status is 'paid' or 'partially_paid'
     if (status === 'paid') {
       for (const item of items) {
         let inventory = await Inventory.findOne({ 
@@ -207,7 +230,15 @@ const createPurchase = async (req, res) => {
             discount_value: item.discount_value,
             amount: item.amount
           }))
-        }
+        },
+        ...((status === 'paid' || status === 'partially_paid') && {
+          payment: {
+            paymentId: supplierPayment.paymentId,
+            amount: supplierPayment.amount,
+            paidAmount: supplierPayment.paidAmount,
+            dueAmount: supplierPayment.dueAmount
+          }
+        })
       }
     });
   } catch (err) {
