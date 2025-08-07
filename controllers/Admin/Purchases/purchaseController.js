@@ -161,7 +161,7 @@ const createPurchase = async (req, res) => {
         amount: req.body.sp_amount || '',
         paidAmount: req.body.sp_amount || '',
         dueAmount: req.body.sp_due_amount || '',
-        notes: sp_notes  || '',
+        notes: req.body.sp_notes  || '',
         createdBy: userId
       });
 
