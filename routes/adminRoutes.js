@@ -9,6 +9,7 @@ const TaxGroupController = require('../controllers/TaxGroupController');
 const ProductController = require('../controllers/ProductController');
 const SupplierController = require('@controllers/Admin/Purchases/SupplierController');
 const purchaseOrderController = require('@controllers/Admin/Purchases/purchaseOrderController');
+const debitNoteController = require('@controllers/Admin/Purchases/debitNoteController');
 const purchaseController = require('@controllers/Admin/Purchases/purchaseController');
 const SignatureController = require('../controllers/SignatureController');
 const BankDetailController = require('@controllers/bankDetailController');
@@ -27,6 +28,7 @@ const { updateProfileValidator } = require('../validators/updateProfileValidator
 const { createSupplierValidator } = require('../validators/Admin/Purchases/SupplierVaidator');
 const { purchaseOrderValidator, updatePurchaseOrderValidator } = require('../validators/Admin/Purchases/purchaseOrderValidator');
 const  {purchaseValidator } = require('../validators/Admin/Purchases/purchaseValidator');
+const  {debitNoteValidator } = require('../validators/Admin/Purchases/debitNoteValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
 const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
@@ -105,6 +107,11 @@ router.post('/suppliers', protect, upload.single('profileImage'), createSupplier
 router.get('/suppliers', protect, SupplierController.listSuppliers);
 router.put('/suppliers/:id', protect, upload.single('profileImage'), SupplierController.updateSupplier);
 router.delete('/suppliers/:id', protect, SupplierController.deleteSupplier);
+
+router.post('/debitnote', protect, upload.single('signatureImage'), debitNoteValidator, debitNoteController.createDebitNote);
+router.get('/debitnote', protect, debitNoteController.getAllDebitNotes);
+router.get('/debitnote/:id', protect, debitNoteController.getDebitNoteById);
+router.delete('/debitnote/:id', protect, debitNoteController.deleteDebitNote);
 
 //purchase
 router.post('/purchases', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.createPurchase);
