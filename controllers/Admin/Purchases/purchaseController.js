@@ -110,7 +110,7 @@ const createPurchase = async (req, res) => {
       totalDiscount: req.body.totalDiscount || totalDiscount,
       totalTax: req.body.totalTax || totalTax,
       roundOff: req.body.roundOff || false,
-      totalAmount: req.body.totalAmount || totalAmount,
+      totalAmount: req.body.grandTotal || totalAmount,
       bank: req.body.bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',
