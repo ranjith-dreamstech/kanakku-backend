@@ -230,15 +230,7 @@ const createPurchase = async (req, res) => {
             discount_value: item.discount_value,
             amount: item.amount
           }))
-        },
-        ...((status === 'paid' || status === 'partially_paid') && {
-          payment: {
-            paymentId: supplierPayment.paymentId,
-            amount: supplierPayment.amount,
-            paidAmount: supplierPayment.paidAmount,
-            dueAmount: supplierPayment.dueAmount
-          }
-        })
+        },       
       }
     });
   } catch (err) {
