@@ -528,7 +528,7 @@ const updateDebitNoteStatus = async (req, res) => {
     } = req.body;
     const userId = req.user; // Assuming user is authenticated
 
-    const validStatuses = ['draft', 'pending', 'approved', 'rejected', 'cancelled'];
+    const validStatuses = ['new', 'pending', 'completed', 'cancelled', 'partially_paid', 'paid'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }

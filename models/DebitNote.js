@@ -78,7 +78,7 @@ const debitNoteSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['draft', 'pending', 'approved', 'rejected', 'cancelled'],
+    enum: ['new', 'pending', 'completed', 'cancelled', 'partially_paid', 'paid'],
     default: 'draft'
   },
   paymentMode: {
