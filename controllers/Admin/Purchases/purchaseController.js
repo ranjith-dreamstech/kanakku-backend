@@ -570,6 +570,98 @@ const listPurchasesMinimal = async (req, res) => {
     }
 };
 
+const listPurchasesPending = async (req, res) => {
+    try {
+        const { search = '' } = req.query;
+        const userId = req.user;
+
+        // Build query
+        const query = { 
+            userId, 
+            isDeleted: false 
+        };
+
+        // Add search filter if search term exists
+        if (search) {
+            query.$or = [
+                { purchaseId: { $regex: search, $options: 'i' } },
+                { purchaseOrderId: { $regex: search, $options: 'i' } },
+                { referenceNo: { $regex: search, $options: 'i' } },
+                { 'vendorId.name': { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Get purchases with different limits based on search
+        const purchases = await Purchase.find(query)
+            .select('_id purchaseId referenceNo purchaseDate status totalAmount vendorId')
+            .populate('vendorId', 'name') // Minimal vendor info
+            .sort({ purchaseDate: -1 })
+            .limit(search ? 0 : 20); // No limit when searching, limit 20 otherwise
+
+        // Get payment details for these purchases
+        const paymentDetails = await SupplierPayment.find({
+            purchaseId: { $in: purchases.map(p => p._id) }
+        }).select('purchaseId amount paidAmount dueAmount paymentDate');
+
+        // Create a map of purchaseId to payment details for quick lookup
+        const paymentMap = paymentDetails.reduce((map, payment) => {
+            map[payment.purchaseId.toString()] = {
+                amount: payment.amount,
+                paidAmount: payment.paidAmount,
+                dueAmount: payment.dueAmount,
+                paymentDate: payment.paymentDate
+            };
+            return map;
+        }, {});
+
+        // Format response and filter purchases
+        const formattedPurchases = purchases
+            .map(purchase => {
+                const paymentInfo = paymentMap[purchase._id.toString()] || null;
+                
+                return {
+                    id: purchase._id,
+                    purchaseId: purchase.purchaseId,
+                    referenceNo: purchase.referenceNo,
+                    purchaseDate: purchase.purchaseDate,
+                    status: purchase.status,
+                    totalAmount: purchase.totalAmount,
+                    vendor: purchase.vendorId ? {
+                        id: purchase.vendorId._id,
+                        name: purchase.vendorId.name
+                    } : null,
+                    payment: paymentInfo
+                };
+            })
+            .filter(purchase => {
+                // Include purchases where:
+                // 1. No payment exists (payment is null), OR
+                // 2. Payment exists with paidAmount > 0
+                return !purchase.payment || purchase.payment.paidAmount > 0;
+            });
+
+        res.status(200).json({
+            success: true,
+            message: search 
+                ? 'Search results for pending purchases retrieved successfully'
+                : 'Pending purchases retrieved successfully',
+            data: formattedPurchases,
+            meta: {
+                count: formattedPurchases.length,
+                isSearchResult: !!search
+            }
+        });
+
+    } catch (err) {
+        console.error('List pending purchases error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching pending purchases',
+            error: err.message
+        });
+    }
+};
+
 // Get purchase by ID
 const getPurchaseById = async (req, res) => {
     try {
@@ -1141,6 +1233,7 @@ module.exports = {
   createPurchase,
   getAllPurchases,
   listPurchasesMinimal,
+  listPurchasesPending,
   getPurchaseById,
   updatePurchaseStatus,
   deletePurchase,
