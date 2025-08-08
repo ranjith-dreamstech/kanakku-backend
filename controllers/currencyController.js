@@ -1,5 +1,6 @@
 const Currency = require('@models/Currency');
 const User = require('@models/User');
+const mongoose = require('mongoose');
 
 const createCurrency = async (req, res) => {
     try {
@@ -262,9 +263,83 @@ const deleteCurrency = async (req, res) => {
     }
 };
 
+const updateCurrencyStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, isDefault } = req.body;
+        const updatedBy = req.user._id;
+
+        // Validate input
+        if (typeof status !== 'boolean' && typeof isDefault !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'Both status and isDefault must be boolean values'
+            });
+        }
+
+        // Find the currency
+        const currency = await Currency.findById(id);
+        if (!currency) {
+            return res.status(404).json({
+                success: false,
+                message: 'Currency not found'
+            });
+        }
+
+        // Prepare update object
+        const update = { updatedBy };
+        if (typeof status === 'boolean') update.status = status;
+        if (typeof isDefault === 'boolean') update.isDefault = isDefault;
+
+        // Update currency
+        const updatedCurrency = await Currency.findByIdAndUpdate(
+            id,
+            update,
+            { new: true }
+        );
+
+        // Handle default currency change
+        if (isDefault === true) {
+            // Unset any other default currencies
+            await Currency.updateMany(
+                { _id: { $ne: id }, isDeleted: false },
+                { $set: { isDefault: false } }
+            );
+
+            // Update all users' default currency reference
+            await User.updateMany(
+                {},
+                { $set: { defaultCurrency: id } }
+            );
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Currency updated successfully',
+            data: {
+                id: updatedCurrency._id,
+                name: updatedCurrency.name,
+                code: updatedCurrency.code,
+                status: updatedCurrency.status,
+                isDefault: updatedCurrency.isDefault,
+                updatedAt: updatedCurrency.updatedAt
+            }
+        });
+
+    } catch (err) {
+        console.error('Currency update error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating currency',
+            error: err.message
+        });
+    }
+};       
+
 module.exports = {
     createCurrency,
     getAllCurrencies,
     updateCurrency,
-    deleteCurrency
+    deleteCurrency,
+    updateCurrencyStatus
 };

@@ -151,6 +151,8 @@ router.post('/currency', protect, createCurrencyValidator, currencyController.cr
 router.get('/currency', protect, currencyController.getAllCurrencies);
 router.put('/currency/:id', protect, currencyController.updateCurrency);
 router.delete('/currency/:id', protect, currencyController.deleteCurrency);
+router.patch('/currency/:id', protect, currencyController.updateCurrencyStatus);
+
 //bankDetails
 router.post('/bank-accounts', protect, createBankDetailValidator, BankDetailController.createBankDetail);
 router.get('/bank-accounts', protect, BankDetailController.listBankDetails);
