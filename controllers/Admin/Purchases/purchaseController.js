@@ -7,11 +7,15 @@ const Product = require('@models/Product');
 const User = require('@models/User');
 const { body, validationResult } = require('express-validator');
 
-// Create a new purchase
 const createPurchase = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -40,16 +44,20 @@ const createPurchase = async (req, res) => {
     } = req.body;
 
     // Validate bill from and bill to users
-    const billFromUser = await User.findById(billFrom);
-    const billToUser = await User.findById(billTo);
+    const billFromUser = await User.findById(billFrom).session(session);
+    const billToUser = await User.findById(billTo).session(session);
     if (!billFromUser || !billToUser) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
     }
 
     // Validate products in items
     for (const item of items) {
-      const product = await Product.findById(item.id);
+      const product = await Product.findById(item.id).session(session);
       if (!product) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
       }
     }
@@ -57,39 +65,33 @@ const createPurchase = async (req, res) => {
     // Validate signature type
     const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
     if (sign_type && !validSignatureTypes.includes(sign_type)) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ message: 'Invalid signature type' });
     }
 
-    // Validate signature data if eSignature is selected
     if (sign_type === 'eSignature') {
       if (!req.file) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ message: 'Signature image is required for eSignature' });
       }
       if (!signatureName) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(400).json({ message: 'Signature name is required for eSignature' });
       }
     }
 
-    // Calculate amounts if not provided in payload
-    const calculatedSubTotal = subTotal || items.reduce((sum, item) => {
-      return sum + (item.amount || (item.quantity * (item.rate || 0)));
-    }, 0);
-
-    const calculatedTotalDiscount = totalDiscount || items.reduce((sum, item) => {
-      return sum + (item.discount || 0);
-    }, 0);
-
-    const calculatedTotalTax = totalTax || items.reduce((sum, item) => {
-      return sum + (item.tax || 0);
-    }, 0);
-
+    // Calculations
+    const calculatedSubTotal = subTotal || items.reduce((sum, item) => sum + (item.amount || (item.quantity * (item.rate || 0))), 0);
+    const calculatedTotalDiscount = totalDiscount || items.reduce((sum, item) => sum + (item.discount || 0), 0);
+    const calculatedTotalTax = totalTax || items.reduce((sum, item) => sum + (item.tax || 0), 0);
     const calculatedGrandTotal = grandTotal || (calculatedSubTotal + calculatedTotalTax - calculatedTotalDiscount);
-    
-    // Determine status based on payment amounts
+
     let status = req.body.status || 'pending';
     let paidAmount = 0;
     let balanceAmount = calculatedGrandTotal;
-    
     if (sp_amount && sp_paid_amount && status === 'paid') {
       if (sp_paid_amount === sp_amount) {
         status = 'paid';
@@ -102,10 +104,10 @@ const createPurchase = async (req, res) => {
       }
     }
 
-    // Generate purchaseOrderId if not provided
+    // Generate purchaseId if missing
     let purchaseId = req.body.purchaseId;
     if (!purchaseId) {
-      const count = await PurchaseOrder.countDocuments();
+      const count = await PurchaseOrder.countDocuments().session(session);
       purchaseId = `PO-${String(count + 1).padStart(6, '0')}`;
     }
 
@@ -129,16 +131,16 @@ const createPurchase = async (req, res) => {
         discount_value: item.discount_value,
         amount: item.amount
       })),
-      status: status,
+      status,
       paymentMode,
-      taxableAmount: req.body.subTotal || taxableAmount,
-      totalDiscount: req.body.totalDiscount || totalDiscount,
-      totalTax: req.body.totalTax || totalTax,
+      taxableAmount: subTotal || calculatedSubTotal,
+      totalDiscount: totalDiscount || calculatedTotalDiscount,
+      totalTax: totalTax || calculatedTotalTax,
       roundOff: req.body.roundOff || false,
-      totalAmount: req.body.grandTotal || totalAmount,
-      paidAmount: req.body.grandTotal,
-      balanceAmount: 0,
-      bank: req.body.bank || null,
+      totalAmount: grandTotal || calculatedGrandTotal,
+      paidAmount,
+      balanceAmount,
+      bank: bank || null,
       notes: notes || '',
       termsAndCondition: termsAndCondition || '',
       sign_type: sign_type || 'none',
@@ -151,23 +153,19 @@ const createPurchase = async (req, res) => {
       billTo
     });
 
-    await purchase.save();
+    await purchase.save({ session });
 
-    // Update purchase order status if purchaseOrderId exists
+    // Update purchase order
     if (purchaseOrderId) {
       await PurchaseOrder.findOneAndUpdate(
         { purchaseOrderId },
-        { 
-          status: status === 'paid' ? 'completed' : 
-                 status === 'cancelled' ? 'cancelled' : 
-                 'pending' 
-        }
+        { status: status === 'paid' ? 'completed' : status === 'cancelled' ? 'cancelled' : 'pending' },
+        { session }
       );
     }
 
-    // Create supplier payment if status is paid or partially_paid
+    // Create supplier payment if applicable
     if (status === 'paid' || status === 'partially_paid') {
-      console.log('here test');
       const supplierPayment = new SupplierPayment({
         purchaseId: purchase._id,
         supplierId: billTo,
@@ -180,30 +178,17 @@ const createPurchase = async (req, res) => {
         notes: req.body.sp_notes  || '',
         createdBy: userId
       });
-
-      await supplierPayment.save();
+      await supplierPayment.save({ session });
     }
 
-    // Update inventory for each product ONLY if status is 'paid'
+    // Update inventory if paid
     if (status === 'paid') {
       for (const item of items) {
-        let inventory = await Inventory.findOne({ 
-          productId: item.id, 
-          userId 
-        });
-
+        let inventory = await Inventory.findOne({ productId: item.id, userId }).session(session);
         if (!inventory) {
-          inventory = new Inventory({
-            productId: item.id,
-            userId,
-            quantity: 0
-          });
+          inventory = new Inventory({ productId: item.id, userId, quantity: 0 });
         }
-
-        // Update quantity
         inventory.quantity += item.qty || 0;
-
-        // Add to inventory history
         inventory.inventory_history.push({
           unitId: item.unit,
           quantity: inventory.quantity,
@@ -214,47 +199,25 @@ const createPurchase = async (req, res) => {
           referenceType: 'purchase',
           createdBy: userId
         });
-
-        await inventory.save();
+        await inventory.save({ session });
       }
     }
+
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(201).json({
       message: 'Purchase created successfully',
       data: {
-        purchase: {
-          id: purchase._id,
-          purchaseId: purchase.purchaseId,
-          purchaseOrderId: purchase.purchaseOrderId,
-          purchaseDate: purchase.purchaseDate,
-          status: purchase.status,
-          totalAmount: purchase.totalAmount,
-          paidAmount: purchase.paidAmount,
-          balanceAmount: purchase.balanceAmount,
-          sign_type: purchase.sign_type,
-          signatureName: purchase.signatureName,
-          items: purchase.items.map(item => ({
-            id: item.id,
-            name: item.name,
-            unit: item.unit,
-            quantity: item.qty,
-            rate: item.rate,
-            discount: item.discount,
-            tax: item.tax,
-            tax_group_id: item.tax_group_id,
-            discount_type: item.discount_type,
-            discount_value: item.discount_value,
-            amount: item.amount
-          }))
-        }
+        purchase
       }
     });
+
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     console.error(err);
-    res.status(500).json({ 
-      message: 'Error creating purchase',
-      error: err.message
-    });
+    res.status(500).json({ message: 'Error creating purchase', error: err.message });
   }
 };
 
