@@ -25,10 +25,9 @@ const createSupplierPayment = async (req, res) => {
       notes,
     } = req.body;
 
-    // Get the uploaded file
     let attachment = null;
     if (req.file) {
-      attachment = req.file.filename;
+      attachment = `uploads/${req.file.filename}`;
     }
 
     const newPayment = new SupplierPayment({
@@ -41,7 +40,7 @@ const createSupplierPayment = async (req, res) => {
       paidAmount,
       dueAmount,
       notes,
-      attachment, // Save file name/path
+      attachment,
       createdBy: userId
     });
 
@@ -162,6 +161,16 @@ const listSupplierPayments = async (req, res) => {
         purchaseDate: formatDate(p.purchaseId.purchaseDate)
       } : null;
 
+      // Handle attachment URL
+      let attachmentUrl = null;
+      if (p.attachment) {
+        const cleanPath = p.attachment.replace(/\\/g, '/');
+        // Check if the path already includes the base URL
+        attachmentUrl = cleanPath.startsWith('http') 
+          ? cleanPath 
+          : `${baseUrl}${cleanPath}`;
+      }
+
       return {
         id: p._id,
         paymentId: p.paymentId,
@@ -171,7 +180,7 @@ const listSupplierPayments = async (req, res) => {
         paidAmount: p.paidAmount,
         dueAmount: p.dueAmount,
         notes: p.notes,
-        attachment: p.attachment,
+        attachment: attachmentUrl,
         supplier,
         purchase,
         paymentMode: p.paymentMode ? p.paymentMode.name : null,
@@ -205,8 +214,16 @@ const listSupplierPayments = async (req, res) => {
 
 const updateSupplierPayment = async (req, res) => {
   try {
-    const { id } = req.params;
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
 
+    const { id } = req.params;
+    const userId = req.user;
     const {
       purchaseId,
       supplierId,
@@ -217,43 +234,73 @@ const updateSupplierPayment = async (req, res) => {
       paidAmount,
       dueAmount,
       notes,
-      createdBy
     } = req.body;
 
     // Check if payment exists
-    const existing = await SupplierPayment.findById(id);
-    if (!existing) {
-      return res.status(404).json({ message: 'Supplier payment not found' });
+    const existingPayment = await SupplierPayment.findById(id);
+    if (!existingPayment) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Supplier payment not found' 
+      });
     }
 
-    // Handle new file if uploaded
-    let attachment = existing.attachment;
+    // Handle new file if uploaded - include 'uploads/' prefix
+    let attachment = existingPayment.attachment;
     if (req.file) {
-      attachment = req.file.filename;
+      attachment = `uploads/${req.file.filename}`;
     }
 
-    const updated = await SupplierPayment.findByIdAndUpdate(id, {
-      purchaseId,
-      supplierId,
-      referenceNumber,
-      paymentDate,
-      paymentMode,
-      amount,
-      paidAmount,
-      dueAmount,
-      notes,
-      attachment,
-      createdBy
-    }, { new: true });
+    const updatedPayment = await SupplierPayment.findByIdAndUpdate(
+      id,
+      {
+        purchaseId,
+        supplierId,
+        referenceNumber,
+        paymentDate,
+        paymentMode,
+        amount,
+        paidAmount,
+        dueAmount,
+        notes,
+        attachment,
+        updatedBy: userId
+      },
+      { new: true }
+    );
+
+    // Update purchase status if payment amounts changed
+    if (existingPayment.paidAmount !== paidAmount || existingPayment.dueAmount !== dueAmount) {
+      let purchaseStatus = 'partially_paid';
+      if (dueAmount === 0) {
+        purchaseStatus = 'paid';
+      }
+
+      await Purchase.findByIdAndUpdate(
+        purchaseId,
+        {
+          $set: {
+            status: purchaseStatus,
+          }
+        }
+      );
+    }
 
     res.status(200).json({
       success: true,
       message: 'Supplier payment updated successfully',
-      data: updated
+      data: {
+        payment: updatedPayment,
+        ...(existingPayment.purchaseId === purchaseId && {
+          updatedPurchaseStatus: dueAmount === 0 ? 'paid' : 'partially_paid'
+        })
+      }
     });
 
   } catch (err) {
+    console.error('Error updating supplier payment:', err);
     res.status(500).json({
+      success: false,
       message: 'Error updating supplier payment',
       error: err.message
     });
