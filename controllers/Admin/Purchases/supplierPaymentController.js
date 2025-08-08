@@ -311,14 +311,32 @@ const deleteSupplierPayment = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // First find the payment to get the purchaseId
+    const payment = await SupplierPayment.findById(id);
+    if (!payment) {
+      return res.status(404).json({ message: 'Supplier payment not found' });
+    }
+
+    // Delete the payment
     const deleted = await SupplierPayment.findByIdAndDelete(id);
     if (!deleted) {
       return res.status(404).json({ message: 'Supplier payment not found' });
     }
 
+    // Update the associated purchase status to "partial paid"
+    const purchase = await Purchase.findByIdAndUpdate(
+      payment.purchaseId,
+      { status: 'partial paid' },
+      { new: true }
+    );
+
+    if (!purchase) {
+      console.warn(`Purchase ${payment.purchaseId} not found, but payment was deleted`);
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Supplier payment deleted successfully',
+      message: 'Supplier payment deleted successfully and purchase status updated to partial paid',
     });
 
   } catch (err) {
