@@ -85,7 +85,7 @@ const getAllCurrencies = async (req, res) => {
         
         const total = await Currency.countDocuments(query);
         const currencies = await Currency.find(query)
-            .sort({ isDefault: -1, name: 1 })
+            .sort({ createdAt: -1, name: 1 })
             .skip(skip)
             .limit(Number(limit))
             .populate('createdBy', 'firstName lastName');
