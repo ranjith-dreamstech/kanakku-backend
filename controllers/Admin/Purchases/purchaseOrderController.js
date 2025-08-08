@@ -7,8 +7,10 @@ const Signature = require('@models/Signature');
 const TaxGroup = require('@models/TaxGroup');
 const { response } = require('express');
 
-// Create a new purchase order
 const createPurchaseOrder = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { 
             vendorId,
@@ -29,56 +31,43 @@ const createPurchaseOrder = async (req, res) => {
             convert_type
         } = req.body;
 
-        // Validate vendor exists and is a supplier
-        // const vendor = await User.findById(vendorId);
-        // if (!vendor || vendor.user_type !== 2) {
-        //     return res.status(400).json({ message: 'Invalid vendor ID or vendor is not a supplier' });
-        // }
-
         // Validate requesting user exists
-        const user = await User.findById(userId);
+        const user = await User.findById(userId).session(session);
         if (!user) {
-            return res.status(422).json({ message: 'Invalid user ID' });
+            throw new Error('Invalid user ID');
         }
 
         // Get bill from and bill to user addresses
-        const billFromUser = await User.findById(billFrom);
-        const billToUser = await User.findById(billTo);
+        const billFromUser = await User.findById(billFrom).session(session);
+        const billToUser = await User.findById(billTo).session(session);
         
         if (!billFromUser || !billToUser) {
-            return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
+            throw new Error('Invalid bill from or bill to user ID');
         }
 
-        // Validate at least one address exists
         if (!billFromUser.address && !billToUser.address) {
-            return res.status(400).json({ message: 'Both bill from and bill to addresses are missing' });
+            throw new Error('Both bill from and bill to addresses are missing');
         }
 
         // Validate products in items
         for (const item of items) {
-            const product = await Product.findById(item.id);
+            const product = await Product.findById(item.id).session(session);
             if (!product) {
-                return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
+                throw new Error(`Invalid product ID: ${item.id}`);
             }
         }
 
-        // Validate signature type
         const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
         if (sign_type && !validSignatureTypes.includes(sign_type)) {
-            return res.status(400).json({ message: 'Invalid signature type' });
+            throw new Error('Invalid signature type');
         }
 
-        // Validate signature data if eSignature is selected
         if (sign_type === 'eSignature') {
-            if (!req.file) {
-                return res.status(400).json({ message: 'Signature image is required for eSignature' });
-            }
-            if (!signatureName) {
-                return res.status(400).json({ message: 'Signature name is required for eSignature' });
-            }
+            if (!req.file) throw new Error('Signature image is required for eSignature');
+            if (!signatureName) throw new Error('Signature name is required for eSignature');
         }
 
-        // Calculate amounts based on the items exactly as they are in the payload
+        // Calculate amounts
         let taxableAmount = 0;
         let totalDiscount = 0;
         let vat = 0;
@@ -86,16 +75,13 @@ const createPurchaseOrder = async (req, res) => {
 
         items.forEach(item => {
             const itemAmount = item.amount || (item.qty * (item.rate || 0));
-            const itemDiscount = item.discount || 0;
-            const itemTax = item.tax || 0;
-            
             taxableAmount += itemAmount;
-            totalDiscount += itemDiscount;
-            vat += itemTax;
+            totalDiscount += item.discount || 0;
+            vat += item.tax || 0;
             totalAmount += itemAmount;
         });
 
-        // Create purchase order with items exactly as in payload
+        // Create purchase order
         const purchaseOrder = new PurchaseOrder({
             vendorId,
             purchaseOrderDate: new Date(orderDate),
@@ -129,51 +115,33 @@ const createPurchaseOrder = async (req, res) => {
             signatureImage: sign_type === 'eSignature' ? req.file.path : null,
             signatureName: sign_type === 'eSignature' ? signatureName : null,
             userId,
-            billFrom: billFrom,
-            billTo: billTo,
+            billFrom,
+            billTo,
             convert_type: convert_type || 'purchase'
         });
 
-        await purchaseOrder.save();
+        await purchaseOrder.save({ session });
 
-        res.status(200).json({ 
-            message: 'Purchase order created successfully', 
-            data: {
-                purchaseOrder: {
-                    id: purchaseOrder._id,
-                    purchaseOrderId: purchaseOrder.purchaseOrderId,
-                    purchaseOrderDate: purchaseOrder.purchaseOrderDate,
-                    dueDate: purchaseOrder.dueDate,
-                    status: purchaseOrder.status,
-                    TotalAmount: purchaseOrder.TotalAmount,
-                    billFrom: purchaseOrder.billFrom,
-                    billTo: purchaseOrder.billTo,
-                    sign_type: purchaseOrder.sign_type,
-                    signatureName: purchaseOrder.signatureName,
-                    items: purchaseOrder.items.map(item => ({
-                        id: item.id,
-                        name: item.name,
-                        unit: item.unit,
-                        qty: item.qty,
-                        rate: item.rate,
-                        discount: item.discount,
-                        tax: item.tax,
-                        tax_group_id: item.tax_group_id,
-                        discount_type: item.discount_type,
-                        discount_value: item.discount_value,
-                        amount: item.amount
-                    }))
-                }
-            }
+        // Commit transaction
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).json({
+            message: 'Purchase order created successfully',
+            data: purchaseOrder
         });
+
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ 
+        // Rollback transaction
+        await session.abortTransaction();
+        session.endSession();
+        res.status(500).json({
             message: 'Error creating purchase order',
             error: err.message
         });
     }
 };
+
 
 const listUsersByType = async (req, res) => {
   try {
