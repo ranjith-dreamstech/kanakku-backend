@@ -507,19 +507,46 @@ const listPurchasesMinimal = async (req, res) => {
             .sort({ purchaseDate: -1 })
             .limit(search ? 0 : 20); // No limit when searching, limit 20 otherwise
 
+        // Get payment details for these purchases
+        const paymentDetails = await SupplierPayment.find({
+            purchaseId: { $in: purchases.map(p => p._id) }
+        }).select('purchaseId amount paidAmount dueAmount paymentDate');
+
+        // Create a map of purchaseId to payment details for quick lookup
+        const paymentMap = paymentDetails.reduce((map, payment) => {
+            map[payment.purchaseId.toString()] = {
+                amount: payment.amount,
+                paidAmount: payment.paidAmount,
+                dueAmount: payment.dueAmount,
+                paymentDate: payment.paymentDate
+            };
+            return map;
+        }, {});
+
         // Format response
-        const formattedPurchases = purchases.map(purchase => ({
-            id: purchase._id,
-            purchaseId: purchase.purchaseId,
-            referenceNo: purchase.referenceNo,
-            purchaseDate: purchase.purchaseDate,
-            status: purchase.status,
-            totalAmount: purchase.totalAmount,
-            vendor: purchase.vendorId ? {
-                id: purchase.vendorId._id,
-                name: purchase.vendorId.name
-            } : null
-        }));
+        const formattedPurchases = purchases.map(purchase => {
+            const paymentInfo = paymentMap[purchase._id.toString()] || null;
+            
+            return {
+                id: purchase._id,
+                purchaseId: purchase.purchaseId,
+                referenceNo: purchase.referenceNo,
+                purchaseDate: purchase.purchaseDate,
+                status: purchase.status,
+                totalAmount: purchase.totalAmount,
+                vendor: purchase.vendorId ? {
+                    id: purchase.vendorId._id,
+                    name: purchase.vendorId.name
+                } : null,
+                // Add payment details if available
+                payment: paymentInfo ? {
+                    amount: paymentInfo.amount,
+                    paidAmount: paymentInfo.paidAmount,
+                    dueAmount: paymentInfo.dueAmount,
+                    paymentDate: paymentInfo.paymentDate
+                } : null
+            };
+        });
 
         res.status(200).json({
             success: true,
