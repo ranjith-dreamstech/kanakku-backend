@@ -46,10 +46,27 @@ const createSupplierPayment = async (req, res) => {
 
     const savedPayment = await newPayment.save();
 
+    let purchaseStatus = 'partially_paid';
+    if (dueAmount === 0) {
+      purchaseStatus = 'paid';
+    }
+
+    await Purchase.findByIdAndUpdate(
+      purchaseId,
+      {
+        $set: {
+          status: purchaseStatus,
+        }
+      }
+    );
+
     res.status(201).json({
       success: true,
       message: 'Supplier payment created successfully',
-      data: savedPayment
+      data: {
+        payment: savedPayment,
+        updatedPurchaseStatus: purchaseStatus
+      }
     });
 
   } catch (err) {
