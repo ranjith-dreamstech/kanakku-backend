@@ -49,11 +49,12 @@ const currencySchema = new mongoose.Schema({
 currencySchema.pre('save', async function(next) {
     if (this.isDefault) {
         await this.constructor.updateMany(
-            { isDefault: true },
+            { _id: { $ne: this._id }, isDefault: true },
             { $set: { isDefault: false } }
         );
     }
     next();
 });
+
 
 module.exports = mongoose.model('Currency', currencySchema);

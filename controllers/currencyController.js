@@ -204,20 +204,6 @@ const updateCurrency = async (req, res) => {
         
         await currency.save();
 
-        // If this is set as default, update all other currencies
-        if (currency.isDefault == true) {
-            await Currency.updateMany(
-                { _id: { $ne: currency._id } },
-                { $set: { isDefault: false } }
-            );
-            
-            // Update user's default currency reference
-            await User.updateMany(
-                {},
-                { $set: { defaultCurrency: currency._id } }
-            );
-        }
-
         res.status(200).json({ 
             success: true,
             message: 'Currency updated successfully', 
