@@ -1,6 +1,7 @@
 const path = require('path');
 const { validationResult } = require('express-validator');
-const SupplierPayment = require('@models/SupplierPayment'); // adjust path
+const SupplierPayment = require('@models/SupplierPayment');
+const Purchase = require('@models/Purchase');
 
 const createSupplierPayment = async (req, res) => {
   try {
