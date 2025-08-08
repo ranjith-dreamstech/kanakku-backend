@@ -303,9 +303,10 @@ const getAllDebitNotes = async (req, res) => {
         name: `${note.vendorId.firstName || ''} ${note.vendorId.lastName || ''}`.trim(),
         email: note.vendorId.email || null,
         phone: note.vendorId.phone || null,
-        profileImage: note.vendorId.profileImage ? `${process.env.BASE_URL}${note.vendorId.profileImage}` : null
+        profileImage: note.vendorId.profileImage 
+          ? `${process.env.BASE_URL || ''}/${note.vendorId.profileImage}`
+          : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
       } : null;
-
       const purchase = note.purchaseId ? {
         id: note.purchaseId._id,
         purchaseId: note.purchaseId.purchaseId || null,

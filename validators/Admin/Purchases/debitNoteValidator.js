@@ -43,7 +43,7 @@ const debitNoteValidator = [
   body('referenceNo').optional().isString(),
   body('notes').optional().isString(),
   body('termsAndCondition').optional().isString(),
-  body('status').optional().isIn(['draft', 'pending', 'approved', 'rejected', 'cancelled'])
+  body('status').optional().isIn(['new', 'pending', 'completed', 'cancelled', 'partially_paid', 'paid'])
 ];
 
 module.exports = {
