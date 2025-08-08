@@ -2,16 +2,22 @@ const path = require('path');
 const { validationResult } = require('express-validator');
 const SupplierPayment = require('@models/SupplierPayment');
 const Purchase = require('@models/Purchase');
+const mongoose = require('mongoose');
 
 const createSupplierPayment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(422).json({
         message: 'Validation failed',
         errors: errors.array()
       });
     }
+
     let userId = req.user;
     const {
       purchaseId,
@@ -44,7 +50,7 @@ const createSupplierPayment = async (req, res) => {
       createdBy: userId
     });
 
-    const savedPayment = await newPayment.save();
+    const savedPayment = await newPayment.save({ session });
 
     let purchaseStatus = 'partially_paid';
     if (dueAmount === 0) {
@@ -53,12 +59,13 @@ const createSupplierPayment = async (req, res) => {
 
     await Purchase.findByIdAndUpdate(
       purchaseId,
-      {
-        $set: {
-          status: purchaseStatus,
-        }
-      }
+      { $set: { status: purchaseStatus } },
+      { session }
     );
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
 
     res.status(201).json({
       success: true,
@@ -70,6 +77,8 @@ const createSupplierPayment = async (req, res) => {
     });
 
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     console.error('Error creating supplier payment:', err);
     res.status(500).json({
       message: 'Error creating supplier payment',
@@ -326,7 +335,7 @@ const deleteSupplierPayment = async (req, res) => {
     // Update the associated purchase status to "partial paid"
     const purchase = await Purchase.findByIdAndUpdate(
       payment.purchaseId,
-      { status: 'partial paid' },
+      { status: 'partially_paid' },
       { new: true }
     );
 
