@@ -110,7 +110,7 @@ const listSupplierPayments = async (req, res) => {
       })
       .populate('purchaseId', 'purchaseId totalAmount purchaseDate')
       .populate('paymentMode', 'name')
-      .sort({ paymentDate: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
