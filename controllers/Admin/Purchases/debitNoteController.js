@@ -619,7 +619,7 @@ const updateDebitNoteStatus = async (req, res) => {
 const deleteDebitNote = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user._id; // Assuming user is authenticated
+    const userId = req.user; // Assuming user is authenticated
 
     const debitNote = await DebitNote.findOneAndUpdate(
       { _id: id, userId, isDeleted: false },
