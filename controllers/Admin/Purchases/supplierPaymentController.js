@@ -3,10 +3,11 @@ const { validationResult } = require('express-validator');
 const SupplierPayment = require('@models/SupplierPayment');
 const Purchase = require('@models/Purchase');
 const mongoose = require('mongoose');
-
+const Inventory = require('@models/Inventory');
 const createSupplierPayment = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -36,6 +37,7 @@ const createSupplierPayment = async (req, res) => {
       attachment = `uploads/${req.file.filename}`;
     }
 
+    // Save supplier payment
     const newPayment = new SupplierPayment({
       purchaseId,
       supplierId,
@@ -52,6 +54,45 @@ const createSupplierPayment = async (req, res) => {
 
     const savedPayment = await newPayment.save({ session });
 
+    // Check if this is the first payment for the purchase
+    const existingPayments = await SupplierPayment.findOne(
+      { purchaseId: purchaseId, _id: { $ne: savedPayment._id } },
+      null,
+      { session }
+    );
+
+    if (!existingPayments) {
+      // No previous payments → create inventory
+      const purchase = await Purchase.findById(purchaseId).session(session);
+      if (!purchase) {
+        throw new Error("Purchase not found for creating inventory.");
+      }
+
+      // Create inventory for each product in purchase
+      for (const item of purchase.items) {
+        await Inventory.findOneAndUpdate(
+          { productId: item.id, userId },
+          {
+            $inc: { quantity: item.qty },
+            $push: {
+              inventory_history: {
+                unitId: item.unit || null,
+                quantity: item.qty,
+                notes: `Stock added from Purchase ${purchase.purchaseId}`,
+                type: 'stock_in',
+                adjustment: item.qty,
+                referenceId: purchase._id,
+                referenceType: 'purchase',
+                createdBy: userId
+              }
+            }
+          },
+          { upsert: true, new: true, session }
+        );
+      }
+    }
+
+    // Update purchase status
     let purchaseStatus = 'partially_paid';
     if (dueAmount === 0) {
       purchaseStatus = 'paid';
