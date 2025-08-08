@@ -107,7 +107,7 @@ router.delete('/debitnote/:id', protect, debitNoteController.deleteDebitNote);
 router.post('/supplierpayments', protect, upload.single('attachment'), supplierPaymentValidator, supplierPaymentController.createSupplierPayment);
 router.get('/supplierpayments', protect, supplierPaymentController.listSupplierPayments);
 router.put('/supplierpayments', protect, upload.single('attachment'), supplierPaymentController.updateSupplierPayment);
-router.delete('/supplierpayments', protect, supplierPaymentController.deleteSupplierPayment);
+router.delete('/supplierpayments/:id', protect, supplierPaymentController.deleteSupplierPayment);
 
 
 //purchase

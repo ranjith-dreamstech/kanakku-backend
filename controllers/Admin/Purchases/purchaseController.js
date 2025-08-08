@@ -496,7 +496,7 @@ const listPurchasesMinimal = async (req, res) => {
                 { purchaseId: { $regex: search, $options: 'i' } },
                 { purchaseOrderId: { $regex: search, $options: 'i' } },
                 { referenceNo: { $regex: search, $options: 'i' } },
-                { 'vendorId.name': { $regex: search, $options: 'i' } } // Assuming vendorId is populated
+                { 'vendorId.name': { $regex: search, $options: 'i' } }
             ];
         }
 

@@ -11,7 +11,7 @@ const createSupplierPayment = async (req, res) => {
         errors: errors.array()
       });
     }
-
+    let userId = req.user;
     const {
       purchaseId,
       supplierId,
@@ -22,7 +22,6 @@ const createSupplierPayment = async (req, res) => {
       paidAmount,
       dueAmount,
       notes,
-      createdBy
     } = req.body;
 
     // Get the uploaded file
@@ -42,7 +41,7 @@ const createSupplierPayment = async (req, res) => {
       dueAmount,
       notes,
       attachment, // Save file name/path
-      createdBy
+      createdBy: userId
     });
 
     const savedPayment = await newPayment.save();
