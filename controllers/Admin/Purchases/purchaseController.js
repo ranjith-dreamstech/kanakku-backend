@@ -597,7 +597,7 @@ const listPurchasesPending = async (req, res) => {
             .populate('vendorId', 'name')
             .sort({ createdAt: -1 })
             .limit(search.trim() ? 0 : 20)
-            .lean(); // Use lean() for faster queries when not needing Mongoose documents
+            .lean();
 
         // Early return if no purchases found
         if (!purchases.length) {
@@ -612,30 +612,43 @@ const listPurchasesPending = async (req, res) => {
             });
         }
 
-        // Get payment details in a single query
+        // Get all payment details for these purchases in a single query
         const purchaseIds = purchases.map(p => p._id);
         const paymentDetails = await SupplierPayment.find({
-            purchaseId: { $in: purchaseIds }
-        }).select('purchaseId amount paidAmount dueAmount paymentDate')
+            purchaseId: { $in: purchaseIds },
+            isDeleted: false
+        }).select('purchaseId amount paidAmount dueAmount')
           .lean();
 
-        // Create payment map more efficiently
-        const paymentMap = new Map();
-        paymentDetails.forEach(payment => {
-            paymentMap.set(payment.purchaseId.toString(), {
-                amount: payment.amount,
-                paidAmount: payment.paidAmount,
-                dueAmount: payment.dueAmount,
-                paymentDate: payment.paymentDate
-            });
-        });
+        // Create aggregated payment information for each purchase
+        const paymentAggregation = paymentDetails.reduce((acc, payment) => {
+            const purchaseId = payment.purchaseId.toString();
+            
+            if (!acc[purchaseId]) {
+                acc[purchaseId] = {
+                    amount: 0,
+                    paidAmount: 0,
+                    dueAmount: 0
+                };
+            }
+            
+            acc[purchaseId].amount += payment.amount || 0;
+            acc[purchaseId].paidAmount += payment.paidAmount || 0;
+            acc[purchaseId].dueAmount += payment.dueAmount || 0;
+            
+            return acc;
+        }, {});
 
         // Process purchases with optimized filtering and mapping
         const formattedPurchases = purchases.reduce((result, purchase) => {
-            const paymentInfo = paymentMap.get(purchase._id.toString());
+            const purchaseIdStr = purchase._id.toString();
+            const paymentInfo = paymentAggregation[purchaseIdStr];
             
-            // Skip purchases with payment and no due amount
-            if (paymentInfo && paymentInfo.dueAmount <= 0) {
+            // Calculate due amount based on purchase total and payments
+            const calculatedDueAmount = purchase.totalAmount - (paymentInfo?.paidAmount || 0);
+            
+            // Skip purchases with no due amount
+            if (calculatedDueAmount <= 0) {
                 return result;
             }
 
@@ -650,7 +663,17 @@ const listPurchasesPending = async (req, res) => {
                     id: purchase.vendorId._id,
                     name: purchase.vendorId.name
                 } : null,
-                payment: paymentInfo || null
+                payment: paymentInfo ? {
+                    amount: paymentInfo.amount,
+                    paidAmount: paymentInfo.paidAmount,
+                    dueAmount: calculatedDueAmount,
+                    paymentDate: paymentInfo.paymentDate
+                } : {
+                    amount: 0,
+                    paidAmount: 0,
+                    dueAmount: purchase.totalAmount,
+                    paymentDate: null
+                }
             });
 
             return result;
