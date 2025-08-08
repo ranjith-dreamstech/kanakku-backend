@@ -103,7 +103,11 @@ const listSupplierPayments = async (req, res) => {
     const total = await SupplierPayment.countDocuments(query);
 
     const payments = await SupplierPayment.find(query)
-      .populate('supplierId', 'firstName lastName email phone')
+      .populate({
+        path: 'supplierId',
+        select: 'firstName lastName email phone profileImage',
+        model: 'User'
+      })
       .populate('purchaseId', 'purchaseId totalAmount purchaseDate')
       .populate('paymentMode', 'name')
       .sort({ paymentDate: -1 })
@@ -120,12 +124,17 @@ const listSupplierPayments = async (req, res) => {
       return `${day}, ${month} ${year}`;
     };
 
+    const baseUrl = `${req.protocol}://${req.get('host')}/`;
+
     const formattedPayments = payments.map((p) => {
       const supplier = p.supplierId ? {
         id: p.supplierId._id,
         name: `${p.supplierId.firstName || ''} ${p.supplierId.lastName || ''}`.trim(),
         email: p.supplierId.email || null,
-        phone: p.supplierId.phone || null
+        phone: p.supplierId.phone || null,
+        profileImage: p.supplierId.profileImage 
+          ? `${baseUrl}${p.supplierId.profileImage.replace(/\\/g, '/')}`
+          : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
       } : null;
 
       const purchase = p.purchaseId ? {
