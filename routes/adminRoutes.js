@@ -13,6 +13,7 @@ const debitNoteController = require('@controllers/Admin/Purchases/debitNoteContr
 const purchaseController = require('@controllers/Admin/Purchases/purchaseController');
 const supplierPaymentController = require('@controllers/Admin/Purchases/supplierPaymentController');
 const SignatureController = require('../controllers/SignatureController');
+const currencyController = require('../controllers/currencyController');
 const BankDetailController = require('@controllers/bankDetailController');
 const CompanySettings = require('@controllers/CompanySettingsController');
 const { uploadCompanyFields, handleUploadError } = require('../middleware/uploadCompanyImages');
@@ -32,6 +33,7 @@ const {supplierPaymentValidator } = require('../validators/Admin/Purchases/suppl
 const  {purchaseValidator } = require('../validators/Admin/Purchases/purchaseValidator');
 const  {debitNoteValidator } = require('../validators/Admin/Purchases/debitNoteValidator');
 const {createSignatureValidator, updateSignatureValidator} = require('../validators/signatureValidator');
+const {createCurrencyValidator} = require('../validators/currencyValidator');
 const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
 const multer = require('multer');
@@ -143,6 +145,12 @@ router.patch('/signatures/set-default/:signatureId', protect, SignatureControlle
 router.patch('/signatures/status/:signatureId', protect, SignatureController.updateSignatureStatus);
 router.post('/paymentmode', protect, SignatureController.createPaymentMode);
 router.get('/paymentmode', protect, SignatureController.listPaymentModes);
+
+//currency
+router.post('/currency', protect, createCurrencyValidator, currencyController.createCurrency);
+router.get('/currency', protect, currencyController.getAllCurrencies);
+router.put('/currency/:id', protect, currencyController.updateCurrency);
+router.delete('/currency/:id', protect, currencyController.deleteCurrency);
 //bankDetails
 router.post('/bank-accounts', protect, createBankDetailValidator, BankDetailController.createBankDetail);
 router.get('/bank-accounts', protect, BankDetailController.listBankDetails);
