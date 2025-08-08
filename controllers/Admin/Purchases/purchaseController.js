@@ -575,12 +575,14 @@ const listPurchasesPending = async (req, res) => {
         const { search = '' } = req.query;
         const userId = req.user;
 
+        // Build the base query
         const query = { 
             userId, 
             isDeleted: false 
         };
 
-        if (search) {
+        // Add search conditions if search term exists
+        if (search.trim()) {
             query.$or = [
                 { purchaseId: { $regex: search, $options: 'i' } },
                 { purchaseOrderId: { $regex: search, $options: 'i' } },
@@ -589,57 +591,80 @@ const listPurchasesPending = async (req, res) => {
             ];
         }
 
+        // Fetch purchases with optimized projection
         const purchases = await Purchase.find(query)
             .select('_id purchaseId referenceNo purchaseDate status totalAmount vendorId')
             .populate('vendorId', 'name')
             .sort({ createdAt: -1 })
-            .limit(search ? 0 : 20);
+            .limit(search.trim() ? 0 : 20)
+            .lean(); // Use lean() for faster queries when not needing Mongoose documents
 
+        // Early return if no purchases found
+        if (!purchases.length) {
+            return res.status(200).json({
+                success: true,
+                message: 'No pending purchases found',
+                data: [],
+                meta: {
+                    count: 0,
+                    isSearchResult: !!search.trim()
+                }
+            });
+        }
+
+        // Get payment details in a single query
+        const purchaseIds = purchases.map(p => p._id);
         const paymentDetails = await SupplierPayment.find({
-            purchaseId: { $in: purchases.map(p => p._id) }
-        }).select('purchaseId amount paidAmount dueAmount paymentDate');
+            purchaseId: { $in: purchaseIds }
+        }).select('purchaseId amount paidAmount dueAmount paymentDate')
+          .lean();
 
-        const paymentMap = paymentDetails.reduce((map, payment) => {
-            map[payment.purchaseId.toString()] = {
+        // Create payment map more efficiently
+        const paymentMap = new Map();
+        paymentDetails.forEach(payment => {
+            paymentMap.set(payment.purchaseId.toString(), {
                 amount: payment.amount,
                 paidAmount: payment.paidAmount,
                 dueAmount: payment.dueAmount,
                 paymentDate: payment.paymentDate
-            };
-            return map;
-        }, {});
-
-        const formattedPurchases = purchases
-            .map(purchase => {
-                const paymentInfo = paymentMap[purchase._id.toString()] || null;
-                
-                return {
-                    id: purchase._id,
-                    purchaseId: purchase.purchaseId,
-                    referenceNo: purchase.referenceNo,
-                    purchaseDate: purchase.purchaseDate,
-                    status: purchase.status,
-                    totalAmount: purchase.totalAmount,
-                    vendor: purchase.vendorId ? {
-                        id: purchase.vendorId._id,
-                        name: purchase.vendorId.name
-                    } : null,
-                    payment: paymentInfo
-                };
-            })
-            .filter(purchase => {               
-                return !purchase.payment || purchase.payment.dueAmount > 0;
             });
+        });
+
+        // Process purchases with optimized filtering and mapping
+        const formattedPurchases = purchases.reduce((result, purchase) => {
+            const paymentInfo = paymentMap.get(purchase._id.toString());
+            
+            // Skip purchases with payment and no due amount
+            if (paymentInfo && paymentInfo.dueAmount <= 0) {
+                return result;
+            }
+
+            result.push({
+                id: purchase._id,
+                purchaseId: purchase.purchaseId,
+                referenceNo: purchase.referenceNo,
+                purchaseDate: purchase.purchaseDate,
+                status: purchase.status,
+                totalAmount: purchase.totalAmount,
+                vendor: purchase.vendorId ? {
+                    id: purchase.vendorId._id,
+                    name: purchase.vendorId.name
+                } : null,
+                payment: paymentInfo || null
+            });
+
+            return result;
+        }, []);
 
         res.status(200).json({
             success: true,
-            message: search 
+            message: search.trim() 
                 ? 'Search results for pending purchases retrieved successfully'
                 : 'Pending purchases retrieved successfully',
             data: formattedPurchases,
             meta: {
                 count: formattedPurchases.length,
-                isSearchResult: !!search
+                isSearchResult: !!search.trim()
             }
         });
 
