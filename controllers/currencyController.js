@@ -132,15 +132,37 @@ const updateCurrency = async (req, res) => {
         const { id } = req.params;
         const { name, code, symbol, status, isDefault } = req.body;
         
+        const errors = {};
+        
+        // Validate required fields if they're being updated
+        if (name !== undefined && !name) {
+            errors.name = 'Currency name is required';
+        }
+        if (code !== undefined && !code) {
+            errors.code = 'Currency code is required';
+        }
+        
+        // If there are validation errors, return them
+        if (Object.keys(errors).length > 0) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Validation failed',
+                errors
+            });
+        }
+
         const currency = await Currency.findOne({ _id: id, isDeleted: false });
         if (!currency) {
             return res.status(404).json({ 
                 success: false,
-                message: 'Currency not found' 
+                message: 'Currency not found',
+                errors: {
+                    id: 'Currency not found'
+                }
             });
         }
 
-        
+        // Check if currency code already exists (excluding current currency)
         if (code && code !== currency.code) {
             const existingCode = await Currency.findOne({ 
                 code, 
@@ -148,12 +170,8 @@ const updateCurrency = async (req, res) => {
                 _id: { $ne: id }
             });
             if (existingCode) {
-                return res.status(409).json({ 
-                    success: false,
-                    message: 'Currency code already exists' 
-                });
+                errors.code = 'Currency code already exists';
             }
-            currency.code = code;
         }
 
         // Check if currency name already exists (excluding current currency)
@@ -164,14 +182,22 @@ const updateCurrency = async (req, res) => {
                 _id: { $ne: id }
             });
             if (existingName) {
-                return res.status(409).json({ 
-                    success: false,
-                    message: 'Currency name already exists' 
-                });
+                errors.name = 'Currency name already exists';
             }
-            currency.name = name;
         }
 
+        // If there are duplicate errors, return them
+        if (Object.keys(errors).length > 0) {
+            return res.status(409).json({ 
+                success: false,
+                message: 'Validation failed',
+                errors
+            });
+        }
+
+        // Update fields if they exist in the request
+        if (name) currency.name = name;
+        if (code) currency.code = code;
         if (symbol) currency.symbol = symbol;
         if (status !== undefined) currency.status = status;
         if (isDefault !== undefined) currency.isDefault = isDefault;
@@ -179,7 +205,7 @@ const updateCurrency = async (req, res) => {
         await currency.save();
 
         // If this is set as default, update all other currencies
-        if (isDefault) {
+        if (currency.isDefault) {
             await Currency.updateMany(
                 { _id: { $ne: currency._id } },
                 { $set: { isDefault: false } }
@@ -206,6 +232,20 @@ const updateCurrency = async (req, res) => {
         });
     } catch (err) {
         console.error('Currency update error:', err);
+        
+        // Handle Mongoose validation errors
+        if (err.name === 'ValidationError') {
+            const validationErrors = {};
+            for (const field in err.errors) {
+                validationErrors[field] = err.errors[field].message;
+            }
+            return res.status(400).json({ 
+                success: false,
+                message: 'Validation failed',
+                errors: validationErrors
+            });
+        }
+        
         res.status(500).json({ 
             success: false,
             message: 'Error updating currency',
