@@ -20,6 +20,7 @@ const createDebitNote = async (req, res) => {
       purchaseId,
       debitNoteDate,
       referenceNo,
+      paymentMode,
       items,
       notes,
       termsAndCondition,
@@ -121,6 +122,7 @@ const createDebitNote = async (req, res) => {
         amount: item.amount || (item.quantity * item.rate),
       })),
       status,
+      paymentMode,
       taxableAmount: req.body.subTotal || taxableAmount,
       totalDiscount: req.body.totalDiscount || totalDiscount,
       totalTax: req.body.totalTax || totalTax,
@@ -268,12 +270,18 @@ const getAllDebitNotes = async (req, res) => {
     // Get total count
     const total = await DebitNote.countDocuments(query);
 
-    // Fetch debit notes
     const debitNotes = await DebitNote.find(query)
-      .populate('vendorId', 'firstName lastName email phone')
+      .populate({
+        path: 'vendorId',
+        select: 'firstName lastName email phone profileImage'
+      })
       .populate('purchaseId', 'purchaseId purchaseDate totalAmount')
-      .populate('createdBy', 'firstName lastName')
-      .populate('approvedBy', 'firstName lastName')
+      .populate('createdBy', 'firstName lastName profileImage')
+      .populate('approvedBy', 'firstName lastName profileImage')
+      .populate({
+        path: 'paymentMode',
+        select: 'name slug status'
+      })
       .sort({ debitNoteDate: -1 })
       .skip(skip)
       .limit(Number(limit));
@@ -294,7 +302,8 @@ const getAllDebitNotes = async (req, res) => {
         id: note.vendorId._id,
         name: `${note.vendorId.firstName || ''} ${note.vendorId.lastName || ''}`.trim(),
         email: note.vendorId.email || null,
-        phone: note.vendorId.phone || null
+        phone: note.vendorId.phone || null,
+        profileImage: note.vendorId.profileImage ? `${process.env.BASE_URL}${note.vendorId.profileImage}` : null
       } : null;
 
       const purchase = note.purchaseId ? {
@@ -306,12 +315,21 @@ const getAllDebitNotes = async (req, res) => {
 
       const createdBy = note.createdBy ? {
         id: note.createdBy._id,
-        name: `${note.createdBy.firstName || ''} ${note.createdBy.lastName || ''}`.trim()
+        name: `${note.createdBy.firstName || ''} ${note.createdBy.lastName || ''}`.trim(),
+        profileImage: note.createdBy.profileImage ? `${process.env.BASE_URL}${note.createdBy.profileImage}` : null
       } : null;
 
       const approvedBy = note.approvedBy ? {
         id: note.approvedBy._id,
-        name: `${note.approvedBy.firstName || ''} ${note.approvedBy.lastName || ''}`.trim()
+        name: `${note.approvedBy.firstName || ''} ${note.approvedBy.lastName || ''}`.trim(),
+        profileImage: note.approvedBy.profileImage ? `${process.env.BASE_URL}${note.approvedBy.profileImage}` : null
+      } : null;
+
+      const paymentMode = note.paymentMode ? {
+        id: note.paymentMode._id,
+        name: note.paymentMode.name,
+        slug: note.paymentMode.slug,
+        status: note.paymentMode.status
       } : null;
 
       return {
@@ -325,6 +343,7 @@ const getAllDebitNotes = async (req, res) => {
         totalAmount: note.totalAmount,
         paidAmount: note.paidAmount || 0,
         balanceAmount: note.balanceAmount || 0,
+        paymentMode,
         sign_type: note.sign_type || 'none',
         signatureName: note.signatureName || null,
         signatureImage: note.signatureImage ? `${process.env.BASE_URL}${note.signatureImage}` : null,
