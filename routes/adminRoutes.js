@@ -36,6 +36,8 @@ const {createSignatureValidator, updateSignatureValidator} = require('../validat
 const {createCurrencyValidator} = require('../validators/currencyValidator');
 const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailStatusValidator } = require('@validators/bankDetailValidator');
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
+const { createCustomerValidator } = require('@validators/customerValidator');
+const customerController = require('@controllers/customerController');
 const multer = require('multer');
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -162,5 +164,8 @@ router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankD
 //company
 router.put('/company-details/:userId', protect, uploadCompanyFields, handleUploadError, updateCompanySettingsValidator, CompanySettings.updateCompanySettings);
 router.get('/company-details/:userId', protect, CompanySettings.getCompanySettings);
+//customer
+router.post('/customers', protect, upload.single('image'), createCustomerValidator, customerController.createCustomer);
+
 
 module.exports = router;

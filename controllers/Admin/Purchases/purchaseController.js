@@ -182,7 +182,7 @@ const createPurchase = async (req, res) => {
     }
 
     // Update inventory if paid
-    if (status === 'paid') {
+    if (status === 'paid' || status === 'partially_paid') {
       for (const item of items) {
         let inventory = await Inventory.findOne({ productId: item.id, userId }).session(session);
         if (!inventory) {
