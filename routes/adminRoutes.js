@@ -38,6 +38,7 @@ const { createBankDetailValidator, updateBankDetailValidator, updateBankDetailSt
 const { updateCompanySettingsValidator } = require('@validators/companySettingsValidator');
 const { createCustomerValidator } = require('@validators/customerValidator');
 const customerController = require('@controllers/customerController');
+const localizationController = require('@controllers/localizationController');
 const multer = require('multer');
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -167,9 +168,12 @@ router.get('/company-details/:userId', protect, CompanySettings.getCompanySettin
 //customer
 router.post('/customers', protect, upload.single('image'), createCustomerValidator, customerController.createCustomer);
 router.put('/customers/:id', protect, upload.single('image'), customerController.updateCustomer);
-router.get('/customers', protect,  customerController.getCustomers);
-router.get('/customers/:id', protect,  customerController.getCustomerById);
-router.delete('/customers/:id', protect,  customerController.deleteCustomer);
+router.get('/customers', protect, customerController.getCustomers);
+router.get('/customers/:id', protect, customerController.getCustomerById);
+router.delete('/customers/:id', protect, customerController.deleteCustomer);
+//localization
+router.get('/localization', protect, localizationController.getDropdownOptions);
+
 
 
 module.exports = router;
