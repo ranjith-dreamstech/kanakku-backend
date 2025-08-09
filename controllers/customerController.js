@@ -102,7 +102,86 @@ const createCustomer = async (req, res) => {
         });
     }
 };
+const getCustomers = async (req, res) => {
+    try {
+        const userId = req.user;
+        const { 
+            page = 1, 
+            limit = 10, 
+            search = '',
+            status
+        } = req.query;
+
+        // Build query
+        const query = { 
+            userId, 
+            isDeleted: false 
+        };
+
+        // Add status filter if provided
+        if (status) {
+            query.status = status; // 'Active' or 'Inactive'
+        }
+
+        // Add search filter
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { phone: { $regex: search, $options: 'i' } },
+                { 'billingAddress.city': { $regex: search, $options: 'i' } },
+                { 'shippingAddress.city': { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Get total count for pagination
+        const total = await Customer.countDocuments(query);
+
+        // Get paginated results
+        const customers = await Customer.find(query)
+            .sort({ createdAt: -1 }) // Newest first
+            .skip((page - 1) * limit)
+            .limit(Number(limit));
+
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+        
+        const formattedCustomers = customers.map(customer => ({
+            id: customer._id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            status: customer.status,
+            imageUrl: customer.imageUrl, // Using the virtual field
+            billingAddress: customer.billingAddress,
+            shippingAddress: customer.shippingAddress,
+            createdAt: customer.createdAt,
+            updatedAt: customer.updatedAt
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: 'Customers fetched successfully',
+            data: {
+                customers: formattedCustomers,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (err) {
+        console.error('Error fetching customers:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching customers',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
 
 module.exports = {
-    createCustomer
+    createCustomer,
+    getCustomers
 };
