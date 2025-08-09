@@ -188,7 +188,18 @@ const updateCustomer = async (req, res) => {
     try {
         const { id } = req.params;
         const userId = req.user;
-        const updateData = req.body;
+        const {
+            name,
+            email,
+            phone,
+            website,
+            notes,
+            status,
+            billingAddress,
+            shippingAddress,
+            bankDetails,
+            profile_image_removed
+        } = req.body;
 
         // Find customer
         const customer = await Customer.findOne({ 
@@ -196,6 +207,7 @@ const updateCustomer = async (req, res) => {
             userId, 
             isDeleted: false 
         });
+        
         if (!customer) {
             if (req.file?.path) fs.unlinkSync(req.file.path);
             return res.status(404).json({ 
@@ -204,10 +216,10 @@ const updateCustomer = async (req, res) => {
             });
         }
 
-        // Check for email conflict
-        if (updateData.email && updateData.email !== customer.email) {
+        // Check for email conflict if email is being updated
+        if (email && email !== customer.email) {
             const existingCustomer = await Customer.findOne({ 
-                email: updateData.email, 
+                email: email, 
                 userId 
             });
             if (existingCustomer) {
@@ -219,30 +231,34 @@ const updateCustomer = async (req, res) => {
             }
         }
 
-        // Handle image update
+        // Handle image update/removal
         let oldImagePath = '';
-        if (req.file) {
+        if (profile_image_removed === 'true') {
+            oldImagePath = customer.image;
+            customer.image = '';
+        } else if (req.file) {
             oldImagePath = customer.image;
             customer.image = req.file.path;
         }
 
         // Update fields
-        const fieldsToUpdate = [
-            'name', 'email', 'phone', 'website', 'notes', 'status',
-            'billingAddress', 'shippingAddress', 'bankDetails'
-        ];
-        
-        fieldsToUpdate.forEach(field => {
-            if (updateData[field] !== undefined) {
-                customer[field] = updateData[field];
-            }
-        });
+        if (name !== undefined) customer.name = name;
+        if (email !== undefined) customer.email = email;
+        if (phone !== undefined) customer.phone = phone || '';
+        if (website !== undefined) customer.website = website || '';
+        if (notes !== undefined) customer.notes = notes || '';
+        if (status !== undefined) customer.status = status || 'Active';
+        if (billingAddress !== undefined) customer.billingAddress = billingAddress || {};
+        if (shippingAddress !== undefined) customer.shippingAddress = shippingAddress || {};
+        if (bankDetails !== undefined) customer.bankDetails = bankDetails || {};
 
         await customer.save();
 
-        // Delete old image if new one was uploaded
-        if (req.file && oldImagePath) {
-            try { fs.unlinkSync(oldImagePath); } catch (err) {
+        // Delete old image if it was replaced or removed
+        if ((req.file || profile_image_removed === 'true') && oldImagePath) {
+            try { 
+                fs.unlinkSync(oldImagePath); 
+            } catch (err) {
                 console.error('Error deleting old image:', err);
             }
         }
