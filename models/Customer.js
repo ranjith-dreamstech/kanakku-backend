@@ -164,10 +164,9 @@ const customerSchema = new mongoose.Schema(
 
 // Virtual for profile image URL
 customerSchema.virtual('imageUrl').get(function () {
-  if (!this.image) {
-    return 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer';
+  if (this.image) {
+   return `${process.env.BASE_URL || 'http://127.0.0.1:5000'}/${this.image.replace(/\\/g, '/')}`;
   }
-  return `${process.env.BASE_URL || 'http://127.0.0.1:5000'}/${this.image.replace(/\\/g, '/')}`;
 });
 
 module.exports = mongoose.model('Customer', customerSchema);

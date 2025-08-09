@@ -1,5 +1,5 @@
 // validators/customerValidator.js
-const { body } = require("express-validator");
+const { body, validationResult } = require("express-validator");
 const fs = require('fs');
 
 exports.createCustomerValidator = [
