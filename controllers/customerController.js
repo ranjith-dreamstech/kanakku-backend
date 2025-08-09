@@ -4,6 +4,7 @@ const User = require('@models/User');
 const fs = require('fs');
 const path = require('path');
 
+// Create Customer
 const createCustomer = async (req, res) => {
     try {
         const {
@@ -18,27 +19,22 @@ const createCustomer = async (req, res) => {
             bankDetails
         } = req.body;
         
-        const userId = req.user; // Assuming user is authenticated and ID is available
-        
+        const userId = req.user;
+
         // Check if user exists
         const user = await User.findById(userId);
         if (!user) {
-            // Clean up uploaded file if exists
-            if (req.file && req.file.path) {
-                fs.unlinkSync(req.file.path);
-            }
+            if (req.file?.path) fs.unlinkSync(req.file.path);
             return res.status(404).json({ 
                 success: false,
                 message: 'User not found' 
             });
         }
 
-        // Check if customer with same email already exists for this user
+        // Check for existing customer with same email
         // const existingCustomer = await Customer.findOne({ email, userId });
         // if (existingCustomer) {
-        //     if (req.file && req.file.path) {
-        //         fs.unlinkSync(req.file.path);
-        //     }
+        //     if (req.file?.path) fs.unlinkSync(req.file.path);
         //     return res.status(409).json({
         //         success: false,
         //         message: 'Customer with this email already exists'
@@ -62,34 +58,14 @@ const createCustomer = async (req, res) => {
 
         await customer.save();
 
-        // Prepare response data
-        const responseData = {
-            id: customer._id,
-            name: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-            website: customer.website,
-            notes: customer.notes,
-            status: customer.status,
-            imageUrl: customer.imageUrl, // Using the virtual field from schema
-            billingAddress: customer.billingAddress,
-            shippingAddress: customer.shippingAddress,
-            bankDetails: customer.bankDetails,
-            createdAt: customer.createdAt,
-            updatedAt: customer.updatedAt
-        };
-
         res.status(201).json({ 
             success: true,
             message: 'Customer created successfully', 
-            data: responseData
+            data: formatCustomerResponse(customer)
         });
     } catch (err) {
-        // Clean up uploaded file if error occurs
-        if (req.file && req.file.path) {
-            try {
-                fs.unlinkSync(req.file.path);
-            } catch (fileErr) {
+        if (req.file?.path) {
+            try { fs.unlinkSync(req.file.path); } catch (fileErr) {
                 console.error('Error cleaning up customer image:', fileErr);
             }
         }
@@ -102,6 +78,8 @@ const createCustomer = async (req, res) => {
         });
     }
 };
+
+// Get All Customers with Pagination
 const getCustomers = async (req, res) => {
     try {
         const userId = req.user;
@@ -118,12 +96,8 @@ const getCustomers = async (req, res) => {
             isDeleted: false 
         };
 
-        // Add status filter if provided
-        if (status) {
-            query.status = status; // 'Active' or 'Inactive'
-        }
-
-        // Add search filter
+        // Add filters
+        if (status) query.status = status;
         if (search) {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
@@ -134,35 +108,20 @@ const getCustomers = async (req, res) => {
             ];
         }
 
-        // Get total count for pagination
-        const total = await Customer.countDocuments(query);
-
         // Get paginated results
-        const customers = await Customer.find(query)
-            .sort({ createdAt: -1 }) // Newest first
-            .skip((page - 1) * limit)
-            .limit(Number(limit));
-
-        const baseUrl = `${req.protocol}://${req.get('host')}/`;
-        
-        const formattedCustomers = customers.map(customer => ({
-            id: customer._id,
-            name: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-            status: customer.status,
-            imageUrl: customer.imageUrl, // Using the virtual field
-            billingAddress: customer.billingAddress,
-            shippingAddress: customer.shippingAddress,
-            createdAt: customer.createdAt,
-            updatedAt: customer.updatedAt
-        }));
+        const [total, customers] = await Promise.all([
+            Customer.countDocuments(query),
+            Customer.find(query)
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(Number(limit))
+        ]);
 
         res.status(200).json({
             success: true,
             message: 'Customers fetched successfully',
             data: {
-                customers: formattedCustomers,
+                customers: customers.map(formatCustomerResponse),
                 pagination: {
                     total,
                     page: Number(page),
@@ -181,7 +140,184 @@ const getCustomers = async (req, res) => {
     }
 };
 
+// Get Single Customer
+const getCustomerById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user;
+
+        const customer = await Customer.findOne({ 
+            _id: id, 
+            userId, 
+            isDeleted: false 
+        });
+
+        if (!customer) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Customer not found' 
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Customer retrieved successfully',
+            data: formatCustomerResponse(customer)
+        });
+    } catch (err) {
+        console.error('Error fetching customer:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching customer',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
+// Update Customer
+const updateCustomer = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user;
+        const updateData = req.body;
+
+        // Find customer
+        const customer = await Customer.findOne({ 
+            _id: id, 
+            userId, 
+            isDeleted: false 
+        });
+        if (!customer) {
+            if (req.file?.path) fs.unlinkSync(req.file.path);
+            return res.status(404).json({ 
+                success: false,
+                message: 'Customer not found' 
+            });
+        }
+
+        // Check for email conflict
+        if (updateData.email && updateData.email !== customer.email) {
+            const existingCustomer = await Customer.findOne({ 
+                email: updateData.email, 
+                userId 
+            });
+            if (existingCustomer) {
+                if (req.file?.path) fs.unlinkSync(req.file.path);
+                return res.status(409).json({
+                    success: false,
+                    message: 'Another customer with this email already exists'
+                });
+            }
+        }
+
+        // Handle image update
+        let oldImagePath = '';
+        if (req.file) {
+            oldImagePath = customer.image;
+            customer.image = req.file.path;
+        }
+
+        // Update fields
+        const fieldsToUpdate = [
+            'name', 'email', 'phone', 'website', 'notes', 'status',
+            'billingAddress', 'shippingAddress', 'bankDetails'
+        ];
+        
+        fieldsToUpdate.forEach(field => {
+            if (updateData[field] !== undefined) {
+                customer[field] = updateData[field];
+            }
+        });
+
+        await customer.save();
+
+        // Delete old image if new one was uploaded
+        if (req.file && oldImagePath) {
+            try { fs.unlinkSync(oldImagePath); } catch (err) {
+                console.error('Error deleting old image:', err);
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Customer updated successfully',
+            data: formatCustomerResponse(customer)
+        });
+    } catch (err) {
+        if (req.file?.path) fs.unlinkSync(req.file.path);
+        console.error('Error updating customer:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating customer',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
+// Delete Customer (Soft Delete)
+const deleteCustomer = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user;
+
+        const customer = await Customer.findOneAndUpdate(
+            { 
+                _id: id, 
+                userId, 
+                isDeleted: false 
+            },
+            { 
+                isDeleted: true,
+                deletedAt: new Date() 
+            },
+            { new: true }
+        );
+
+        if (!customer) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Customer not found' 
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Customer deleted successfully',
+            data: { id: customer._id }
+        });
+    } catch (err) {
+        console.error('Error deleting customer:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting customer',
+            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+    }
+};
+
+// Helper function to format customer response
+const formatCustomerResponse = (customer) => {
+    return {
+        id: customer._id,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        website: customer.website,
+        notes: customer.notes,
+        status: customer.status,
+        imageUrl: customer.imageUrl,
+        billingAddress: customer.billingAddress,
+        shippingAddress: customer.shippingAddress,
+        bankDetails: customer.bankDetails,
+        createdAt: customer.createdAt,
+        updatedAt: customer.updatedAt
+    };
+};
+
 module.exports = {
     createCustomer,
-    getCustomers
+    getCustomers,
+    getCustomerById,
+    updateCustomer,
+    deleteCustomer
 };

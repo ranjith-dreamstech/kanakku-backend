@@ -166,7 +166,10 @@ router.put('/company-details/:userId', protect, uploadCompanyFields, handleUploa
 router.get('/company-details/:userId', protect, CompanySettings.getCompanySettings);
 //customer
 router.post('/customers', protect, upload.single('image'), createCustomerValidator, customerController.createCustomer);
+router.put('/customers/:id', protect, upload.single('image'), customerController.updateCustomer);
 router.get('/customers', protect,  customerController.getCustomers);
+router.get('/customers/:id', protect,  customerController.getCustomerById);
+router.delete('/customers/:id', protect,  customerController.deleteCustomer);
 
 
 module.exports = router;
