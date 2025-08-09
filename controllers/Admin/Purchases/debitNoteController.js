@@ -270,7 +270,8 @@ const getAllDebitNotes = async (req, res) => {
     // Get total count
     const total = await DebitNote.countDocuments(query);
 
-    const debitNotes = await DebitNote.find(query)
+    // Base query with common populates
+    let baseQuery = DebitNote.find(query)
       .populate({
         path: 'vendorId',
         select: 'firstName lastName email phone profileImage'
@@ -278,14 +279,25 @@ const getAllDebitNotes = async (req, res) => {
       .populate('purchaseId', 'purchaseId purchaseDate totalAmount')
       .populate('createdBy', 'firstName lastName profileImage')
       .populate('approvedBy', 'firstName lastName profileImage')
-      .populate({
-        path: 'paymentMode',
-        select: 'name slug status',
-        match: { _id: { $exists: true, $ne: null } } // Fix: Only populate valid payment modes
-      })
       .sort({ debitNoteDate: -1 })
       .skip(skip)
       .limit(Number(limit));
+
+    // Run the query without paymentMode populate
+    let debitNotes = await baseQuery.lean();
+
+    // Manually populate paymentMode only when valid
+    for (let note of debitNotes) {
+      if (note.paymentMode && mongoose.Types.ObjectId.isValid(note.paymentMode)) {
+        const PaymentMode = mongoose.model('PaymentMode');
+        const paymentModeData = await PaymentMode.findById(note.paymentMode)
+          .select('name slug status')
+          .lean();
+        note.paymentMode = paymentModeData || null;
+      } else {
+        note.paymentMode = null;
+      }
+    }
 
     // Format function for date
     const formatDate = (date) => {
@@ -304,11 +316,11 @@ const getAllDebitNotes = async (req, res) => {
         name: `${note.vendorId.firstName || ''} ${note.vendorId.lastName || ''}`.trim(),
         email: note.vendorId.email || null,
         phone: note.vendorId.phone || null,
-        profileImage: note.vendorId.profileImage 
+        profileImage: note.vendorId.profileImage
           ? `${process.env.BASE_URL || ''}/${note.vendorId.profileImage}`
           : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
       } : null;
-      
+
       const purchase = note.purchaseId ? {
         id: note.purchaseId._id,
         purchaseId: note.purchaseId.purchaseId || null,
@@ -328,8 +340,7 @@ const getAllDebitNotes = async (req, res) => {
         profileImage: note.approvedBy.profileImage ? `${process.env.BASE_URL}${note.approvedBy.profileImage}` : null
       } : null;
 
-      // Fix: Handle invalid paymentMode references
-      const paymentMode = note.paymentMode && note.paymentMode._id ? {
+      const paymentMode = note.paymentMode ? {
         id: note.paymentMode._id,
         name: note.paymentMode.name,
         slug: note.paymentMode.slug,
@@ -377,7 +388,7 @@ const getAllDebitNotes = async (req, res) => {
   } catch (err) {
     console.error('Get all debit notes error:', err);
     res.status(500).json({
-      success: false, // Added success flag for consistency
+      success: false,
       message: 'Error retrieving debit notes',
       error: err.message
     });
@@ -388,7 +399,14 @@ const getAllDebitNotes = async (req, res) => {
 const getDebitNoteById = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user; // Assuming user is authenticated
+    
+    // Validate debit note ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid debit note ID'
+      });
+    }
 
     const debitNote = await DebitNote.findOne({ _id: id, isDeleted: false })
       .populate('vendorId', 'firstName lastName email phone address')
@@ -397,10 +415,18 @@ const getDebitNoteById = async (req, res) => {
       .populate('items.tax_group_id', 'name rate')
       .populate('createdBy', 'firstName lastName')
       .populate('approvedBy', 'firstName lastName')
-      .populate('bank', 'bankName accountNumber branch');
+      .populate('bank', 'bankName accountNumber branch')
+      .populate({
+        path: 'paymentMode',
+        select: 'name slug status',
+        match: { _id: { $exists: true, $ne: null } } // Only populate valid payment modes
+      });
 
     if (!debitNote) {
-      return res.status(404).json({ message: 'Debit note not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Debit note not found' 
+      });
     }
 
     const formatDate = (date) => {
@@ -435,6 +461,14 @@ const getDebitNoteById = async (req, res) => {
       bankName: debitNote.bank.bankName || null,
       accountNumber: debitNote.bank.accountNumber || null,
       branch: debitNote.bank.branch || null
+    } : null;
+
+    // Payment mode details - Fixed: Handle invalid paymentMode references
+    const paymentMode = debitNote.paymentMode && debitNote.paymentMode._id ? {
+      id: debitNote.paymentMode._id,
+      name: debitNote.paymentMode.name,
+      slug: debitNote.paymentMode.slug,
+      status: debitNote.paymentMode.status
     } : null;
 
     // Created by
@@ -488,7 +522,7 @@ const getDebitNoteById = async (req, res) => {
       totalAmount: debitNote.totalAmount || 0,
       paidAmount: debitNote.paidAmount || 0,
       balanceAmount: debitNote.balanceAmount || 0,
-      paymentMode: debitNote.paymentMode || null,
+      paymentMode,
       bank,
       notes: debitNote.notes || null,
       termsAndCondition: debitNote.termsAndCondition || null,
@@ -513,6 +547,7 @@ const getDebitNoteById = async (req, res) => {
   } catch (err) {
     console.error('Get debit note by ID error:', err);
     res.status(500).json({ 
+      success: false,
       message: 'Error retrieving debit note',
       error: err.message
     });
