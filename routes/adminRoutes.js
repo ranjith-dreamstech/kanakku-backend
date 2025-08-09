@@ -173,6 +173,8 @@ router.get('/customers/:id', protect, customerController.getCustomerById);
 router.delete('/customers/:id', protect, customerController.deleteCustomer);
 //localization
 router.get('/localization', protect, localizationController.getDropdownOptions);
+router.post('/localizations', protect , localizationController.saveLocalization);
+router.get('/localizations', protect, localizationController.getLocalization);
 
 
 

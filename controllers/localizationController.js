@@ -1,6 +1,7 @@
 const DateFormat = require('@models/DateFormat');
 const TimeFormat = require('@models/TimeFormat');
 const Timezone = require('@models/Timezone');
+const Localization = require('@models/Localization');
 
 const getDropdownOptions = async (req, res) => {
   try {
@@ -52,6 +53,103 @@ const getDropdownOptions = async (req, res) => {
   }
 };
 
+const saveLocalization = async (req, res) => {
+  try {
+    const { dateFormatId, timeFormatId, timezoneId } = req.body;
+    const userId = req.user;
+
+    // Validate all IDs exist
+    const [dateFormat, timeFormat, timezone] = await Promise.all([
+      DateFormat.findById(dateFormatId),
+      TimeFormat.findById(timeFormatId),
+      Timezone.findById(timezoneId)
+    ]);
+
+    // Deactivate any previous active settings
+    await Localization.updateMany(
+      { user: userId, isActive: true },
+      { isActive: false }
+    );
+
+    // Create new localization
+    const localization = await Localization.create({
+      user: userId,
+      dateFormat: dateFormatId,
+      timeFormat: timeFormatId,
+      timezone: timezoneId
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Localization settings saved successfully',
+      data: localization
+    });
+
+  } catch (err) {
+    console.error('Error saving localization:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Error saving localization settings',
+      error: err.message 
+    });
+  }
+};
+
+// Get current localization settings
+const getLocalization = async (req, res) => {
+  try {
+    const userId = req.user;
+
+    const localization = await Localization.findOne({ 
+      user: userId, 
+      isActive: true 
+    })
+    .populate('dateFormat', 'title format')
+    .populate('timeFormat', 'name format')
+    .populate('timezone', 'name utc_offset');
+
+    if (!localization) {
+      return res.status(404).json({
+        success: false,
+        message: 'No localization settings found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Localization settings retrieved successfully',
+      data: {
+        dateFormat: {
+          id: localization.dateFormat._id,
+          title: localization.dateFormat.title,
+          format: localization.dateFormat.format
+        },
+        timeFormat: {
+          id: localization.timeFormat._id,
+          name: localization.timeFormat.name,
+          format: localization.timeFormat.format
+        },
+        timezone: {
+          id: localization.timezone._id,
+          name: localization.timezone.name,
+          offset: localization.timezone.utc_offset
+        }
+      }
+    });
+
+  } catch (err) {
+    console.error('Error fetching localization:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching localization settings',
+      error: err.message 
+    });
+  }
+};
+
+
 module.exports = {
+  saveLocalization,
+  getLocalization,
   getDropdownOptions
 };
