@@ -6,77 +6,86 @@ const path = require('path');
 
 // Create Customer
 const createCustomer = async (req, res) => {
-    try {
-        const {
-            name,
-            email,
-            phone,
-            website,
-            notes,
-            status,
-            billingAddress,
-            shippingAddress,
-            bankDetails
-        } = req.body;
-        
-        const userId = req.user;
+  try {
+    const {
+      name,
+      email,
+      phone,
+      website,
+      notes,
+      status,
+      billingAddress,
+      shippingAddress,
+      bankDetails,
+      profile_image_removed
+    } = req.body;
+    
+    const userId = req.user;
 
-        // Check if user exists
-        const user = await User.findById(userId);
-        if (!user) {
-            if (req.file?.path) fs.unlinkSync(req.file.path);
-            return res.status(404).json({ 
-                success: false,
-                message: 'User not found' 
-            });
-        }
-
-        // Check for existing customer with same email
-        // const existingCustomer = await Customer.findOne({ email, userId });
-        // if (existingCustomer) {
-        //     if (req.file?.path) fs.unlinkSync(req.file.path);
-        //     return res.status(409).json({
-        //         success: false,
-        //         message: 'Customer with this email already exists'
-        //     });
-        // }
-
-        // Create new customer
-        const customer = new Customer({
-            name,
-            email,
-            phone: phone || '',
-            website: website || '',
-            notes: notes || '',
-            image: req.file ? req.file.path : '',
-            status: status || 'Active',
-            billingAddress: billingAddress || {},
-            shippingAddress: shippingAddress || {},
-            bankDetails: bankDetails || {},
-            userId
-        });
-
-        await customer.save();
-
-        res.status(201).json({ 
-            success: true,
-            message: 'Customer created successfully', 
-            data: formatCustomerResponse(customer)
-        });
-    } catch (err) {
-        if (req.file?.path) {
-            try { fs.unlinkSync(req.file.path); } catch (fileErr) {
-                console.error('Error cleaning up customer image:', fileErr);
-            }
-        }
-        
-        console.error('Customer creation error:', err);
-        res.status(500).json({ 
-            success: false,
-            message: 'Error creating customer',
-            error: err.message 
-        });
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
     }
+
+    // Check for existing customer with same email
+    const existingCustomer = await Customer.findOne({ email, userId });
+    if (existingCustomer) {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+      return res.status(409).json({
+        success: false,
+        message: 'Customer with this email already exists'
+      });
+    }
+
+    // Handle image removal
+    let imagePath = '';
+    if (profile_image_removed === 'true') {
+      imagePath = '';
+    } else if (req.file) {
+      imagePath = req.file.path;
+    }
+
+    // Create new customer
+    const customer = new Customer({
+      name,
+      email,
+      phone: phone || '',
+      website: website || '',
+      notes: notes || '',
+      image: imagePath,
+      status: status || 'Active',
+      billingAddress: billingAddress || {},
+      shippingAddress: shippingAddress || {},
+      bankDetails: bankDetails || {},
+      userId
+    });
+
+    await customer.save();
+
+    res.status(201).json({ 
+      success: true,
+      message: 'Customer created successfully', 
+      data: formatCustomerResponse(customer)
+    });
+  } catch (err) {
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (fileErr) {
+        console.error('Error cleaning up customer image:', fileErr);
+      }
+    }
+    
+    console.error('Customer creation error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error creating customer',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
+  }
 };
 
 // Get All Customers with Pagination
