@@ -22,6 +22,11 @@ const localizationSchema = new mongoose.Schema({
     ref: 'Timezone',
     required: true
   },
+  startWeek: {
+    type: String,
+    enum: ['Sunday', 'Monday'],
+    default: 'Monday'
+  },
   isActive: {
     type: Boolean,
     default: true

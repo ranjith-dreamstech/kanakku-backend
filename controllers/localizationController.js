@@ -53,9 +53,10 @@ const getDropdownOptions = async (req, res) => {
   }
 };
 
+// controllers/localizationController.js
 const saveLocalization = async (req, res) => {
   try {
-    const { dateFormatId, timeFormatId, timezoneId } = req.body;
+    const { dateFormatId, timeFormatId, timezoneId, startWeek } = req.body;
     const userId = req.user;
 
     // Validate all IDs exist
@@ -64,6 +65,21 @@ const saveLocalization = async (req, res) => {
       TimeFormat.findById(timeFormatId),
       Timezone.findById(timezoneId)
     ]);
+
+    // if (!dateFormat || !timeFormat || !timezone) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: 'Invalid date format, time format or timezone'
+    //   });
+    // }
+
+    // // Validate startWeek
+    // if (startWeek && !['Sunday', 'Monday'].includes(startWeek)) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: 'startWeek must be either "Sunday" or "Monday"'
+    //   });
+    // }
 
     // Deactivate any previous active settings
     await Localization.updateMany(
@@ -76,7 +92,8 @@ const saveLocalization = async (req, res) => {
       user: userId,
       dateFormat: dateFormatId,
       timeFormat: timeFormatId,
-      timezone: timezoneId
+      timezone: timezoneId,
+      startWeek: startWeek || 'Monday' // Default to Monday if not provided
     });
 
     res.status(201).json({
@@ -95,7 +112,6 @@ const saveLocalization = async (req, res) => {
   }
 };
 
-// Get current localization settings
 const getLocalization = async (req, res) => {
   try {
     const userId = req.user;
@@ -133,7 +149,8 @@ const getLocalization = async (req, res) => {
           id: localization.timezone._id,
           name: localization.timezone.name,
           offset: localization.timezone.utc_offset
-        }
+        },
+        startWeek: localization.startWeek
       }
     });
 
