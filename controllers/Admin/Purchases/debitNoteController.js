@@ -280,7 +280,8 @@ const getAllDebitNotes = async (req, res) => {
       .populate('approvedBy', 'firstName lastName profileImage')
       .populate({
         path: 'paymentMode',
-        select: 'name slug status'
+        select: 'name slug status',
+        match: { _id: { $exists: true, $ne: null } } // Fix: Only populate valid payment modes
       })
       .sort({ debitNoteDate: -1 })
       .skip(skip)
@@ -307,6 +308,7 @@ const getAllDebitNotes = async (req, res) => {
           ? `${process.env.BASE_URL || ''}/${note.vendorId.profileImage}`
           : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
       } : null;
+      
       const purchase = note.purchaseId ? {
         id: note.purchaseId._id,
         purchaseId: note.purchaseId.purchaseId || null,
@@ -326,7 +328,8 @@ const getAllDebitNotes = async (req, res) => {
         profileImage: note.approvedBy.profileImage ? `${process.env.BASE_URL}${note.approvedBy.profileImage}` : null
       } : null;
 
-      const paymentMode = note.paymentMode ? {
+      // Fix: Handle invalid paymentMode references
+      const paymentMode = note.paymentMode && note.paymentMode._id ? {
         id: note.paymentMode._id,
         name: note.paymentMode.name,
         slug: note.paymentMode.slug,
@@ -374,6 +377,7 @@ const getAllDebitNotes = async (req, res) => {
   } catch (err) {
     console.error('Get all debit notes error:', err);
     res.status(500).json({
+      success: false, // Added success flag for consistency
       message: 'Error retrieving debit notes',
       error: err.message
     });
