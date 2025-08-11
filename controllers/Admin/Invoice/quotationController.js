@@ -4,6 +4,7 @@ const User = require('@models/User');
 const Product = require('@models/Product');
 const Signature = require('@models/Signature');
 const TaxGroup = require('@models/TaxGroup');
+const Customer = require('@models/Customer');
 
 const createQuotation = async (req, res) => {
     const session = await mongoose.startSession();
@@ -37,7 +38,7 @@ const createQuotation = async (req, res) => {
 
         // Get bill from and bill to user addresses
         const billFromUser = await User.findById(billFrom).session(session);
-        const billToUser = await User.findById(billTo).session(session);
+        const billToUser = await Customer.findById(billTo).session(session);
         
         if (!billFromUser || !billToUser) {
             throw new Error('Invalid bill from or bill to user ID');

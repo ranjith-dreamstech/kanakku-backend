@@ -128,7 +128,7 @@ const quotationSchema = new mongoose.Schema({
     required: true
   },
   billTo: {
-    ref: 'User',
+    ref: 'Customer',
     type: mongoose.Schema.Types.ObjectId,
     required: true
   },
