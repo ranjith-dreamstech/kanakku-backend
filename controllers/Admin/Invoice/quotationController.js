@@ -387,9 +387,8 @@ const getAllCustomers = async (req, res) => {
 
         // Get all matching customers without pagination
         const customers = await Customer.find(query)
-            .sort({ createdAt: -1 })
-            .lean(); // Using lean() for better performance with virtuals
-
+            .sort({ createdAt: -1 });
+        
         res.status(200).json({
             success: true,
             message: 'Customers fetched successfully',
