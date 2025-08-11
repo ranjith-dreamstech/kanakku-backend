@@ -83,7 +83,7 @@ const createCustomer = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: 'Error creating customer',
-      error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+      error: err.message 
     });
   }
 };
@@ -144,7 +144,7 @@ const getCustomers = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching customers',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+            error: err.message 
         });
     }
 };
@@ -274,7 +274,7 @@ const updateCustomer = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error updating customer',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+            error: err.message 
         });
     }
 };
@@ -315,7 +315,7 @@ const deleteCustomer = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error deleting customer',
-            error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+           error: err.message 
         });
     }
 };

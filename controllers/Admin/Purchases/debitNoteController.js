@@ -557,59 +557,115 @@ const getDebitNoteById = async (req, res) => {
 // Update debit note status
 const updateDebitNoteStatus = async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const { id } = req.params;
+    const userId = req.user;
     const { 
       status, 
       approvedBy,
       sign_type,
       signatureId,
       signatureName,
-      signatureImage
+      paidAmount = 0
     } = req.body;
-    const userId = req.user; // Assuming user is authenticated
 
-    const validStatuses = ['new', 'pending', 'completed', 'cancelled', 'partially_paid', 'paid'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid status' });
-    }
-
-    const debitNote = await DebitNote.findOne({ _id: id, isDeleted: false });
+    // Validate debit note exists
+    const debitNote = await DebitNote.findOne({ 
+      _id: id, 
+      isDeleted: false 
+    }).populate('items.productId');
+    
     if (!debitNote) {
-      return res.status(404).json({ message: 'Debit note not found' });
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ 
+        success: false,
+        message: 'Debit note not found' 
+      });
     }
 
-    // Validate signature type if provided
-    if (sign_type) {
-      const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
-      if (!validSignatureTypes.includes(sign_type)) {
-        return res.status(400).json({ message: 'Invalid signature type' });
+    // Validate status
+const validStatuses = ['new', 'pending', 'completed', 'cancelled', 'partially_paid', 'paid'];
+    if (!validStatuses.includes(status)) {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid status' 
+      });
+    }
+
+    // Validate signature type
+    const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
+    if (sign_type && !validSignatureTypes.includes(sign_type)) {
+      if (req.file?.path) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid signature type' 
+      });
+    }
+
+    // Validate signature data if eSignature is selected
+    if (sign_type === 'eSignature') {
+      if (!req.file && !debitNote.signatureImage) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Signature image is required for eSignature' 
+        });
       }
-      
-      debitNote.sign_type = sign_type;
-      
-      if (sign_type === 'eSignature') {
-        if (!signatureName) {
-          return res.status(400).json({ message: 'Signature name is required for eSignature' });
-        }
-        debitNote.signatureName = signatureName;
-        debitNote.signatureImage = req.file ? req.file.path : signatureImage;
-      } else {
-        debitNote.signatureName = null;
-        debitNote.signatureImage = null;
+      if (!signatureName) {
+        if (req.file?.path) fs.unlinkSync(req.file.path);
+        return res.status(400).json({ 
+          success: false,
+          message: 'Signature name is required for eSignature' 
+        });
       }
     }
 
     // Validate approved by user if status is being approved
     if (status === 'approved') {
-      const approver = await User.findById(approvedBy);
+      const approver = await User.findById(approvedBy || userId);
       if (!approver) {
-        return res.status(422).json({ message: 'Invalid approved by user ID' });
+        if (req.file?.path) fs.unlinkSync(req.file.path);
+        return res.status(422).json({ 
+          success: false,
+          message: 'Invalid approved by user ID' 
+        });
       }
-      debitNote.approvedBy = approvedBy;
+      debitNote.approvedBy = approvedBy || userId;
     }
 
+    // Handle signature image update
+    let oldSignaturePath = '';
+    if (req.file) {
+      oldSignaturePath = debitNote.signatureImage;
+      debitNote.signatureImage = req.file.path;
+    }
+
+    // Update fields
     debitNote.status = status;
+    if (sign_type) debitNote.sign_type = sign_type;
+    if (signatureName) debitNote.signatureName = signatureName;
+    if (signatureId) debitNote.signatureId = signatureId;
+    
+    // Update payment amounts if status involves payment
+    if (['partially_paid', 'paid'].includes(status)) {
+      debitNote.paidAmount = paidAmount;
+      debitNote.balanceAmount = debitNote.totalAmount - paidAmount;
+    }
+
     await debitNote.save();
+
+    // Delete old signature if new one was uploaded
+    if (req.file && oldSignaturePath) {
+      try { 
+        fs.unlinkSync(oldSignaturePath); 
+      } catch (err) {
+        console.error('Error deleting old signature:', err);
+      }
+    }
 
     // If status is approved, update inventory
     if (status === 'approved') {
@@ -657,23 +713,25 @@ const updateDebitNoteStatus = async (req, res) => {
       } : null,
       sign_type: debitNote.sign_type,
       signatureName: debitNote.signatureName,
-      signatureImage: debitNote.signatureImage ? `${process.env.BASE_URL}${debitNote.signatureImage}` : null,
-      updatedAt: new Date(debitNote.updatedAt)
+      signatureImage: debitNote.signatureImage ? `${process.env.BASE_URL || 'http://127.0.0.1:5000'}/${debitNote.signatureImage.replace(/\\/g, '/')}` : null,
+      updatedAt: debitNote.updatedAt
     };
 
     res.status(200).json({
+      success: true,
       message: 'Debit note status updated successfully',
       data: responseData
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ 
+    if (req.file?.path) fs.unlinkSync(req.file.path);
+    console.error('Error updating debit note status:', err);
+    res.status(500).json({
+      success: false,
       message: 'Error updating debit note status',
       error: err.message
     });
   }
 };
-
 // Delete debit note (soft delete)
 const deleteDebitNote = async (req, res) => {
   try {
