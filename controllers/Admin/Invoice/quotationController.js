@@ -366,9 +366,9 @@ const listQuotations = async (req, res) => {
 
         // Get quotations with pagination
         const quotations = await Quotation.find(query)
-            .populate('customerId', 'firstName lastName email phone image')
+            .populate('customerId', 'name email phone image')
             .populate('signatureId', 'signatureName')
-            .populate('billTo', 'firstName lastName email profileImage phone')
+            .populate('billTo', 'name email phone image billingAddress')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(Number(limit));
@@ -400,7 +400,7 @@ const listQuotations = async (req, res) => {
             // Customer details with image
             const customerDetails = quotation.customerId ? {
                 id: quotation.customerId._id,
-                name: `${quotation.customerId.firstName || ''} ${quotation.customerId.lastName || ''}`.trim(),
+                name: quotation.customerId.name || '',
                 email: quotation.customerId.email || null,
                 phone: quotation.customerId.phone || null,
                 image: quotation.customerId.image 
@@ -408,15 +408,16 @@ const listQuotations = async (req, res) => {
                     : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
             } : null;
 
-            // BillTo details
+            // BillTo details (from Customer model)
             const billToDetails = quotation.billTo ? {
                 id: quotation.billTo._id,
-                name: `${quotation.billTo.firstName || ''} ${quotation.billTo.lastName || ''}`.trim(),
+                name: quotation.billTo.name || '',
                 email: quotation.billTo.email || null,
                 phone: quotation.billTo.phone || null,
                 image: quotation.billTo.image 
                     ? `${baseUrl}${quotation.billTo.image.replace(/\\/g, '/')}`
-                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile',
+                billingAddress: quotation.billTo.billingAddress || null
             } : null;
 
             // Signature details
