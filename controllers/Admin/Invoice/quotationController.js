@@ -310,55 +310,173 @@ const deleteQuotation = async (req, res) => {
 
 const listQuotations = async (req, res) => {
     try {
-        const { status, customerId, startDate, endDate, search } = req.query;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const { 
+            page = 1, 
+            limit = 10, 
+            status, 
+            search = '',
+            customerId,
+            startDate,
+            endDate
+        } = req.query;
+
+        const userId = req.user;
         const skip = (page - 1) * limit;
 
-        // Build the query
-        const query = { isDeleted: false };
+        // Build query
+        const query = { 
+            userId, 
+            isDeleted: false 
+        };
 
-        if (status) query.status = status;
-        if (customerId) query.customerId = customerId;
-        
-        if (startDate && endDate) {
-            query.quotationDate = {
-                $gte: new Date(startDate),
-                $lte: new Date(endDate)
-            };
+        // Add status filter
+        if (status && ['draft', 'sent', 'accepted', 'rejected', 'expired'].includes(status)) {
+            query.status = status;
         }
 
+        // Add customer filter
+        if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+            query.customerId = customerId;
+        }
+
+        // Add date range filter
+        if (startDate || endDate) {
+            query.quotationDate = {};
+            if (startDate) {
+                query.quotationDate.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                query.quotationDate.$lte = new Date(endDate);
+            }
+        }
+
+        // Add search filter
         if (search) {
             const searchRegex = new RegExp(search, 'i');
             query.$or = [
                 { quotationId: searchRegex },
                 { referenceNo: searchRegex },
-                { 'items.name': searchRegex }
+                { 'items.name': searchRegex },
+                { notes: searchRegex }
             ];
         }
 
-        const [quotations, total] = await Promise.all([
-            Quotation.find(query)
-                .populate('customerId', 'firstName lastName')
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit),
-            Quotation.countDocuments(query)
-        ]);
+        // Get total count
+        const total = await Quotation.countDocuments(query);
+
+        // Get quotations with pagination
+        const quotations = await Quotation.find(query)
+            .populate('customerId', 'firstName lastName email phone image')
+            .populate('signatureId', 'signatureName')
+            .populate('billTo', 'firstName lastName email profileImage phone')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(Number(limit));
+
+        // Get the next quotation ID
+        const lastQuotation = await Quotation.findOne()
+            .sort({ quotationId: -1 })
+            .select('quotationId');
+        
+        let nextQuotationId = 'QT-000001'; // Default if no quotations exist
+        if (lastQuotation) {
+            const lastNumber = parseInt(lastQuotation.quotationId.split('-')[1]);
+            nextQuotationId = `QT-${String(lastNumber + 1).padStart(6, '0')}`;
+        }
+
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+        
+        const formattedQuotations = quotations.map((quotation) => {
+            // Format dates as "dd, MMM yyyy"
+            const formatDate = (date) => {
+                if (!date) return null;
+                const d = new Date(date);
+                const day = d.getDate().toString().padStart(2, '0');
+                const month = d.toLocaleString('default', { month: 'short' });
+                const year = d.getFullYear();
+                return `${day}, ${month} ${year}`;
+            };
+
+            // Customer details with image
+            const customerDetails = quotation.customerId ? {
+                id: quotation.customerId._id,
+                name: `${quotation.customerId.firstName || ''} ${quotation.customerId.lastName || ''}`.trim(),
+                email: quotation.customerId.email || null,
+                phone: quotation.customerId.phone || null,
+                image: quotation.customerId.image 
+                    ? `${baseUrl}${quotation.customerId.image.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
+            } : null;
+
+            // BillTo details
+            const billToDetails = quotation.billTo ? {
+                id: quotation.billTo._id,
+                name: `${quotation.billTo.firstName || ''} ${quotation.billTo.lastName || ''}`.trim(),
+                email: quotation.billTo.email || null,
+                phone: quotation.billTo.phone || null,
+                profileImage: quotation.billTo.profileImage 
+                    ? `${baseUrl}${quotation.billTo.profileImage.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
+            } : null;
+
+            // Signature details
+            const signatureImage = quotation.signatureImage 
+                ? `${baseUrl}${quotation.signatureImage.replace(/\\/g, '/')}`
+                : null;
+
+            const signatureDetails = quotation.sign_type === 'eSignature' ? {
+                name: quotation.signatureName || null,
+                image: signatureImage
+            } : quotation.signatureId ? {
+                id: quotation.signatureId._id,
+                name: quotation.signatureId.signatureName || null
+            } : null;
+
+            return {
+                id: quotation._id,
+                quotationId: quotation.quotationId,
+                customer: customerDetails,
+                quotationDate: formatDate(quotation.quotationDate),
+                expiryDate: formatDate(quotation.expiryDate),
+                referenceNo: quotation.referenceNo,
+                status: quotation.status,
+                paymentTerms: quotation.paymentTerms,
+                taxableAmount: quotation.taxableAmount,
+                totalDiscount: quotation.totalDiscount,
+                vat: quotation.vat,
+                TotalAmount: quotation.TotalAmount,
+                itemsCount: quotation.items.length,
+                billFrom: quotation.billFrom,
+                billTo: billToDetails,
+                notes: quotation.notes,
+                sign_type: quotation.sign_type,
+                signature: signatureDetails,
+                convert_type: quotation.convert_type,
+                createdAt: formatDate(quotation.createdAt),
+                updatedAt: formatDate(quotation.updatedAt)
+            };
+        });
 
         res.status(200).json({
+            success: true,
             message: 'Quotations retrieved successfully',
-            data: quotations,
-            pagination: {
-                total,
-                page,
-                pages: Math.ceil(total / limit),
-                limit
+            data: {
+                quotations: formattedQuotations,
+                nextQuotationId,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
             }
         });
+
     } catch (err) {
+        console.error('List quotations error:', err);
         res.status(500).json({
-            message: 'Error retrieving quotations',
+            success: false,
+            message: 'Error fetching quotations',
             error: err.message
         });
     }
