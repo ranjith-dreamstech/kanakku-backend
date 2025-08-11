@@ -186,6 +186,19 @@ const getCustomerById = async (req, res) => {
 // Update Customer
 const updateCustomer = async (req, res) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            if (req.file?.path) fs.unlinkSync(req.file.path);
+            return res.status(400).json({
+                success: false,
+                message: 'Validation failed',
+                errors: errors.array().reduce((acc, err) => {
+                    acc[err.path] = err.msg;
+                    return acc;
+                }, {})
+            });
+        }
+
         const { id } = req.params;
         const userId = req.user;
         const {
@@ -241,17 +254,27 @@ const updateCustomer = async (req, res) => {
             customer.image = req.file.path;
         }
 
-        // Update fields
-        if (name !== undefined) customer.name = name;
-        if (email !== undefined) customer.email = email;
-        if (phone !== undefined) customer.phone = phone || '';
-        if (website !== undefined) customer.website = website || '';
-        if (notes !== undefined) customer.notes = notes || '';
-        if (status !== undefined) customer.status = status || 'Active';
-        if (billingAddress !== undefined) customer.billingAddress = billingAddress || {};
-        if (shippingAddress !== undefined) customer.shippingAddress = shippingAddress || {};
-        if (bankDetails !== undefined) customer.bankDetails = bankDetails || {};
+        // Update fields with proper validation
+        const updateFields = {
+            name: name !== undefined ? name : customer.name,
+            email: email !== undefined ? email : customer.email,
+            phone: phone !== undefined ? phone || '' : customer.phone,
+            website: website !== undefined ? website || '' : customer.website,
+            notes: notes !== undefined ? notes || '' : customer.notes,
+            status: status !== undefined ? status || 'Active' : customer.status,
+            billingAddress: billingAddress !== undefined ? 
+                (typeof billingAddress === 'string' ? JSON.parse(billingAddress) : billingAddress) || {} 
+                : customer.billingAddress,
+            shippingAddress: shippingAddress !== undefined ? 
+                (typeof shippingAddress === 'string' ? JSON.parse(shippingAddress) : shippingAddress) || {} 
+                : customer.shippingAddress,
+            bankDetails: bankDetails !== undefined ? 
+                (typeof bankDetails === 'string' ? JSON.parse(bankDetails) : bankDetails) || {} 
+                : customer.bankDetails
+        };
 
+        // Apply updates
+        Object.assign(customer, updateFields);
         await customer.save();
 
         // Delete old image if it was replaced or removed
