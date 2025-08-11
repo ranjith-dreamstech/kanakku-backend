@@ -363,11 +363,72 @@ const listQuotations = async (req, res) => {
     }
 };
 
+const getAllCustomers = async (req, res) => {
+    try {
+        const userId = req.user;
+        const { search = '', status } = req.query;
+
+        // Build query
+        const query = { 
+            userId, 
+            isDeleted: false 
+        };
+
+        // Add filters
+        if (status) query.status = status;
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { phone: { $regex: search, $options: 'i' } },
+                { 'billingAddress.city': { $regex: search, $options: 'i' } },
+                { 'shippingAddress.city': { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Get all matching customers without pagination
+        const customers = await Customer.find(query)
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            message: 'Customers fetched successfully',
+            data: {
+                customers: customers.map(formatCustomerResponse),
+                count: customers.length
+            }
+        });
+    } catch (err) {
+        console.error('Error fetching customers:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching customers',
+            error: err.message 
+        });
+    }
+};
+
+// Helper function to format customer response
+function formatCustomerResponse(customer) {
+    return {
+        id: customer._id,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        status: customer.status,
+        billingAddress: customer.billingAddress,
+        shippingAddress: customer.shippingAddress,
+        createdAt: customer.createdAt,
+        updatedAt: customer.updatedAt
+    };
+};
+
 module.exports = {
     createQuotation,
     getQuotationById,
     updateQuotation,
     deleteQuotation,
     listQuotations,
+    getAllCustomers,
     
 };
