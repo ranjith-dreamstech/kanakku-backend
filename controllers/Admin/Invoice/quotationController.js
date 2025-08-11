@@ -366,7 +366,6 @@ const listQuotations = async (req, res) => {
 
 const getAllCustomers = async (req, res) => {
     try {
-       
         const { search = '', status } = req.query;
 
         // Build query
@@ -388,13 +387,14 @@ const getAllCustomers = async (req, res) => {
 
         // Get all matching customers without pagination
         const customers = await Customer.find(query)
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean(); // Using lean() for better performance with virtuals
 
         res.status(200).json({
             success: true,
             message: 'Customers fetched successfully',
             data: {
-                customers: customers.map(formatCustomerResponse),
+                customers: customers.map(customer => formatCustomerResponse(customer)),
                 count: customers.length
             }
         });
@@ -408,7 +408,6 @@ const getAllCustomers = async (req, res) => {
     }
 };
 
-// Helper function to format customer response
 function formatCustomerResponse(customer) {
     return {
         id: customer._id,
@@ -416,6 +415,7 @@ function formatCustomerResponse(customer) {
         email: customer.email,
         phone: customer.phone,
         status: customer.status,
+        image: customer.imageUrl || null, // Include the image URL from virtual
         billingAddress: customer.billingAddress,
         shippingAddress: customer.shippingAddress,
         createdAt: customer.createdAt,
