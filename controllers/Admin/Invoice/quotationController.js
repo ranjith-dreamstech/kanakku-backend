@@ -169,9 +169,9 @@ const getQuotationById = async (req, res) => {
             if (!date) return null;
             const d = new Date(date);
             const day = d.getDate().toString().padStart(2, '0');
-            const month = d.toLocaleString('default', { month: 'short' });
+            const month = (d.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
             const year = d.getFullYear();
-            return `${day}, ${month} ${year}`;
+            return `${day}/${month}/${year}`;
         };
 
         // Format customer details
@@ -298,17 +298,7 @@ const updateQuotation = async (req, res) => {
         }
 
         // Validate signature data if being updated
-        if (updateData.sign_type) {
-            const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
-            if (!validSignatureTypes.includes(updateData.sign_type)) {
-                throw new Error('Invalid signature type');
-            }
 
-            if (updateData.sign_type === 'eSignature') {
-                if (!req.file) throw new Error('Signature image is required for eSignature');
-                if (!updateData.signatureName) throw new Error('Signature name is required for eSignature');
-            }
-        }
 
         // Update fields
         if (updateData.quotationDate) quotation.quotationDate = new Date(updateData.quotationDate);
