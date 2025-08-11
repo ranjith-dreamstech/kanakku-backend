@@ -164,14 +164,14 @@ const getQuotationById = async (req, res) => {
             });
         }
 
-        // Format dates as "dd, MMM yyyy"
+        // Format dates as "dd/MM/yyyy"
         const formatDate = (date) => {
             if (!date) return null;
             const d = new Date(date);
             const day = d.getDate().toString().padStart(2, '0');
-            const month = d.toLocaleString('default', { month: 'short' });
+            const month = (d.getMonth() + 1).toString().padStart(2, '0');
             const year = d.getFullYear();
-            return `${day}, ${month} ${year}`;
+            return `${day}/${month}/${year}`;
         };
 
         // Format customer details

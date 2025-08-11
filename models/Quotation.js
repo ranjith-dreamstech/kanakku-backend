@@ -12,7 +12,6 @@ const quotationSchema = new mongoose.Schema({
   },
   quotationDate: {
     type: Date,
-    default: Date.now,
     required: true
   },
   expiryDate: {
