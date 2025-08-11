@@ -414,8 +414,8 @@ const listQuotations = async (req, res) => {
                 name: `${quotation.billTo.firstName || ''} ${quotation.billTo.lastName || ''}`.trim(),
                 email: quotation.billTo.email || null,
                 phone: quotation.billTo.phone || null,
-                profileImage: quotation.billTo.profileImage 
-                    ? `${baseUrl}${quotation.billTo.profileImage.replace(/\\/g, '/')}`
+                image: quotation.billTo.image 
+                    ? `${baseUrl}${quotation.billTo.image.replace(/\\/g, '/')}`
                     : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile'
             } : null;
 
