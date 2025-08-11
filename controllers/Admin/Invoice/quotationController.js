@@ -298,17 +298,7 @@ const updateQuotation = async (req, res) => {
         }
 
         // Validate signature data if being updated
-        if (updateData.sign_type) {
-            const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
-            if (!validSignatureTypes.includes(updateData.sign_type)) {
-                throw new Error('Invalid signature type');
-            }
 
-            if (updateData.sign_type === 'eSignature') {
-                if (!req.file) throw new Error('Signature image is required for eSignature');
-                if (!updateData.signatureName) throw new Error('Signature name is required for eSignature');
-            }
-        }
 
         // Update fields
         if (updateData.quotationDate) quotation.quotationDate = new Date(updateData.quotationDate);
