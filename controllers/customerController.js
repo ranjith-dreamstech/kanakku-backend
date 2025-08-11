@@ -186,19 +186,7 @@ const getCustomerById = async (req, res) => {
 // Update Customer
 const updateCustomer = async (req, res) => {
     try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            if (req.file?.path) fs.unlinkSync(req.file.path);
-            return res.status(400).json({
-                success: false,
-                message: 'Validation failed',
-                errors: errors.array().reduce((acc, err) => {
-                    acc[err.path] = err.msg;
-                    return acc;
-                }, {})
-            });
-        }
-
+      
         const { id } = req.params;
         const userId = req.user;
         const {
