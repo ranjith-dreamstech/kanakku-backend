@@ -40,6 +40,13 @@ const { createCustomerValidator } = require('@validators/customerValidator');
 const customerController = require('@controllers/customerController');
 const localizationController = require('@controllers/localizationController');
 const multer = require('multer');
+const quotationController = require('@controllers/Admin/Invoice/quotationController');
+const  { quotationValidator , updateQuotationValidator } = require('../validators/Admin/Invoice/quotationValidator');
+
+
+
+
+
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
 router.get('/states/:countryId', protect, adminController.getStates);
@@ -175,6 +182,13 @@ router.delete('/customers/:id', protect, customerController.deleteCustomer);
 router.get('/localization', protect, localizationController.getDropdownOptions);
 router.post('/localizations', protect , localizationController.saveLocalization);
 router.get('/localizations', protect, localizationController.getLocalization);
+//Quotation
+router.post('/quotations', protect, upload.single('signatureImage'), quotationValidator, quotationController.createQuotation);
+router.get('/quotations', protect, quotationController.listQuotations);
+router.get('/quotations/:id', protect, quotationController.getQuotationById);
+router.put('/quotations/:id', protect, upload.single('signatureImage'), updateQuotationValidator, quotationController.updateQuotation);
+router.delete('/quotations/:id', protect, quotationController.deleteQuotation);
+
 
 
 
