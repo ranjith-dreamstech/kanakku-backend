@@ -183,6 +183,6 @@ router.get('/quotations/:id', protect, quotationController.getQuotationById);
 router.put('/quotations/:id', protect, upload.single('signatureImage'), updateQuotationValidator, quotationController.updateQuotation);
 router.delete('/quotations/:id', protect, quotationController.deleteQuotation);
 router.get('/quotations', protect, quotationController.listQuotations);
-router.get('/customers/all', protect, quotationController.getAllCustomers);
+router.get('/customers-all', protect, quotationController.getAllCustomers);
 
 module.exports = router;

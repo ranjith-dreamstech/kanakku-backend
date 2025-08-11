@@ -24,7 +24,7 @@ const localizationSchema = new mongoose.Schema({
   },
   startWeek: {
     type: String,
-    enum: ['Sunday', 'Monday'],
+    enum: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
     default: 'Monday'
   },
   isActive: {

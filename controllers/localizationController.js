@@ -5,25 +5,54 @@ const Localization = require('@models/Localization');
 
 const getDropdownOptions = async (req, res) => {
   try {
-    const [dateFormats, timeFormats, timezones] = await Promise.all([
+    const userId = req.user;
+
+    const [localization, dateFormats, timeFormats, timezones] = await Promise.all([
+      Localization.findOne({ user: userId, isActive: true })
+        .populate('dateFormat', 'title format')
+        .populate('timeFormat', 'name format')
+        .populate('timezone', 'name utc_offset'),
+
       DateFormat.find({ isActive: true, isDeleted: false })
         .select('title format')
         .sort({ title: 1 }),
-      
+
       TimeFormat.find({ isActive: true, isDeleted: false })
         .select('name format')
         .sort({ name: 1 }),
-      
+
       Timezone.find()
         .select('name utc_offset')
         .sort({ name: 1 })
     ]);
 
-    // Format the response
-    const response = {
+    res.status(200).json({
       success: true,
-      message: 'Dropdown options retrieved successfully',
+      message: 'Localization and dropdown options retrieved successfully',
       data: {
+        // ✅ Localization settings
+        settings: localization
+          ? {
+              dateFormat: {
+                id: localization.dateFormat._id,
+                title: localization.dateFormat.title,
+                format: localization.dateFormat.format
+              },
+              timeFormat: {
+                id: localization.timeFormat._id,
+                name: localization.timeFormat.name,
+                format: localization.timeFormat.format
+              },
+              timezone: {
+                id: localization.timezone._id,
+                name: localization.timezone.name,
+                offset: localization.timezone.utc_offset
+              },
+              startWeek: localization.startWeek
+            }
+          : null,
+
+        // ✅ Dropdowns
         dateFormats: dateFormats.map(format => ({
           id: format._id,
           title: format.title,
@@ -40,14 +69,13 @@ const getDropdownOptions = async (req, res) => {
           offset: zone.utc_offset
         }))
       }
-    };
+    });
 
-    res.status(200).json(response);
   } catch (err) {
-    console.error('Error fetching dropdown options:', err);
+    console.error('Error fetching localization & dropdowns:', err);
     res.status(500).json({
       success: false,
-      message: 'Error fetching dropdown options',
+      message: 'Error fetching localization and dropdown options',
       error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
     });
   }
