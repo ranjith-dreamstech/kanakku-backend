@@ -151,8 +151,8 @@ const getQuotationById = async (req, res) => {
             isDeleted: false
         })
             .populate('customerId', 'name email phone image billingAddress')
-            .populate('userId', 'name email phone image')
-            .populate('billFrom', 'name email phone image address')
+            .populate('userId', 'firstName lastName email phone profileImage address')
+            .populate('billFrom', 'firstName lastName email phone profileImage address')
             .populate('billTo', 'name email phone image billingAddress')
             .populate('items.id', 'name description price unit')
             .populate('signatureId', 'signatureName');
@@ -186,12 +186,10 @@ const getQuotationById = async (req, res) => {
             billingAddress: quotation.customerId.billingAddress || null
         } : null;
 
-        // Format billFrom details
+        // Format billFrom details (from User model)
         const billFromDetails = quotation.billFrom ? {
             id: quotation.billFrom._id,
-            firstName: quotation.billFrom.firstName || '',
-            lastName: quotation.billFrom.lastName || '',
-            fullName: `${quotation.billFrom.firstName || ''} ${quotation.billFrom.lastName || ''}`.trim(),
+            name: `${quotation.billFrom.firstName || ''} ${quotation.billFrom.lastName || ''}`.trim(),
             email: quotation.billFrom.email || null,
             phone: quotation.billFrom.phone || null,
             profileImage: quotation.billFrom.profileImage 
@@ -201,7 +199,7 @@ const getQuotationById = async (req, res) => {
             user_type: quotation.billFrom.user_type || 1
         } : null;
 
-        // Format billTo details
+        // Format billTo details (from Customer model)
         const billToDetails = quotation.billTo ? {
             id: quotation.billTo._id,
             name: quotation.billTo.name || '',
