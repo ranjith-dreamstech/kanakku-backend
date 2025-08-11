@@ -43,10 +43,6 @@ const multer = require('multer');
 const quotationController = require('@controllers/Admin/Invoice/quotationController');
 const  { quotationValidator , updateQuotationValidator } = require('../validators/Admin/Invoice/quotationValidator');
 
-
-
-
-
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
 router.get('/states/:countryId', protect, adminController.getStates);
@@ -121,7 +117,6 @@ router.get('/supplierpayments', protect, supplierPaymentController.listSupplierP
 router.put('/supplierpayments/:id', protect, upload.single('attachment'), supplierPaymentController.updateSupplierPayment);
 router.delete('/supplierpayments/:id', protect, supplierPaymentController.deleteSupplierPayment);
 
-
 //purchase
 router.post('/purchases', protect, upload.single('signatureImage'), purchaseValidator, purchaseController.createPurchase);
 router.get('/purchases', protect, purchaseController.getAllPurchases);
@@ -137,7 +132,6 @@ router.get('/purchase-orders/:id', protect, purchaseOrderController.getPurchaseO
 router.put('/purchase-orders/:id', protect, upload.single('signatureImage'), updatePurchaseOrderValidator, purchaseOrderController.updatePurchaseOrder);
 router.delete('/purchase-orders/:id', protect, purchaseOrderController.deletePurchaseOrder);
 router.get('/purchase-minimal', protect, purchaseOrderController.listPurchaseOrdersMinimal);
-
 
 // Helper routes for purchase order creation
 router.get('/user/type/:type', protect, purchaseOrderController.listUsersByType);
@@ -190,8 +184,5 @@ router.put('/quotations/:id', protect, upload.single('signatureImage'), updateQu
 router.delete('/quotations/:id', protect, quotationController.deleteQuotation);
 router.get('/quotations', protect, quotationController.listQuotations);
 router.get('/customers/all', protect, quotationController.getAllCustomers);
-
-
-
 
 module.exports = router;

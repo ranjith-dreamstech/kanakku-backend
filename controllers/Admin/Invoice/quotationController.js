@@ -366,12 +366,11 @@ const listQuotations = async (req, res) => {
 
 const getAllCustomers = async (req, res) => {
     try {
-        const userId = req.user;
+       
         const { search = '', status } = req.query;
 
         // Build query
-        const query = { 
-            userId, 
+        const query = {              
             isDeleted: false 
         };
 
