@@ -189,13 +189,16 @@ const getQuotationById = async (req, res) => {
         // Format billFrom details
         const billFromDetails = quotation.billFrom ? {
             id: quotation.billFrom._id,
-            name: quotation.billFrom.name || '',
+            firstName: quotation.billFrom.firstName || '',
+            lastName: quotation.billFrom.lastName || '',
+            fullName: `${quotation.billFrom.firstName || ''} ${quotation.billFrom.lastName || ''}`.trim(),
             email: quotation.billFrom.email || null,
             phone: quotation.billFrom.phone || null,
-            image: quotation.billFrom.image 
-                ? `${baseUrl}${quotation.billFrom.image.replace(/\\/g, '/')}`
+            profileImage: quotation.billFrom.profileImage 
+                ? `${baseUrl}${quotation.billFrom.profileImage.replace(/\\/g, '/')}`
                 : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile',
-            address: quotation.billFrom.address || null
+            address: quotation.billFrom.address || null,
+            user_type: quotation.billFrom.user_type || 1
         } : null;
 
         // Format billTo details
