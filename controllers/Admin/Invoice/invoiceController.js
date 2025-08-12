@@ -173,55 +173,376 @@ const updateInvoice = async (req, res) => {
 };
 
 const getInvoice = async (req, res) => {
-  try {
-    const invoice = await Invoice.findById(req.params.id)
-      .populate('customerId')
-      .populate('items.productId')
-      .populate('items.unit')
-      .populate('billFrom')
-      .populate('billTo');
+    try {
+        const invoice = await Invoice.findById(req.params.id)
+            .populate('customerId', 'name email phone image billingAddress')
+            .populate('billFrom', 'name email phone companyName address')
+            .populate('billTo', 'name email phone billingAddress')
+            .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode');
 
-    if (!invoice) {
-      return res.status(404).json({ message: 'Invoice not found' });
+        if (!invoice) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Invoice not found' 
+            });
+        }
+
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+
+        // Format dates as "dd, MMM yyyy"
+        const formatDate = (date) => {
+            if (!date) return null;
+            const d = new Date(date);
+            const day = d.getDate().toString().padStart(2, '0');
+            const month = d.toLocaleString('default', { month: 'short' });
+            const year = d.getFullYear();
+            return `${day}, ${month} ${year}`;
+        };
+
+        // Customer details with image
+        const customerDetails = invoice.customerId ? {
+            id: invoice.customerId._id,
+            name: invoice.customerId.name || '',
+            email: invoice.customerId.email || null,
+            phone: invoice.customerId.phone || null,
+            image: invoice.customerId.image 
+                ? `${baseUrl}${invoice.customerId.image.replace(/\\/g, '/')}`
+                : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer',
+            billingAddress: invoice.customerId.billingAddress || null
+        } : null;
+
+        // BillFrom details (typically the seller/company)
+        const billFromDetails = invoice.billFrom ? {
+            id: invoice.billFrom._id,
+            name: invoice.billFrom.name || '',
+            email: invoice.billFrom.email || null,
+            phone: invoice.billFrom.phone || null,
+            companyName: invoice.billFrom.companyName || null,
+            address: invoice.billFrom.address || null
+        } : null;
+
+        // BillTo details (from Customer model)
+        const billToDetails = invoice.billTo ? {
+            id: invoice.billTo._id,
+            name: invoice.billTo.name || '',
+            email: invoice.billTo.email || null,
+            phone: invoice.billTo.phone || null,
+            billingAddress: invoice.billTo.billingAddress || null
+        } : null;
+
+        // Bank details
+        const bankDetails = invoice.bank ? {
+            accountHoldername: invoice.bank.accountHoldername || '',
+            bankName: invoice.bank.bankName || '',
+            branchName: invoice.bank.branchName || '',
+            accountNumber: invoice.bank.accountNumber || '',
+            IFSCCode: invoice.bank.IFSCCode || ''
+        } : null;
+
+        // Signature details
+        const signatureImage = invoice.signatureImage 
+            ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
+            : null;
+
+        const signatureDetails = invoice.sign_type === 'eSignature' ? {
+            name: invoice.signatureName || null,
+            image: signatureImage
+        } : null;
+
+        // Format items
+        const formattedItems = invoice.items.map(item => ({
+            id: item._id,
+            productId: item.productId?._id || null,
+            name: item.name || (item.productId?.name || ''),
+            description: item.productId?.description || '',
+            code: item.productId?.code || '',
+            key: item.key || 0,
+            quantity: item.quantity,
+            units: item.units,
+            unit: item.unit ? {
+                id: item.unit._id,
+                name: item.unit.name,
+                symbol: item.unit.symbol
+            } : null,
+            rate: item.rate,
+            discount: item.discount,
+            tax: item.tax,
+            taxInfo: item.taxInfo,
+            amount: item.amount,
+            discountType: item.discountType,
+            isRateFormUpdated: item.isRateFormUpdated,
+            form_updated_discounttype: item.form_updated_discounttype,
+            form_updated_discount: item.form_updated_discount,
+            form_updated_rate: item.form_updated_rate,
+            form_updated_tax: item.form_updated_tax
+        }));
+
+        const responseData = {
+            id: invoice._id,
+            invoiceNumber: invoice.invoiceNumber,
+            customer: customerDetails,
+            invoiceDate: formatDate(invoice.invoiceDate),
+            dueDate: formatDate(invoice.dueDate),
+            referenceNo: invoice.referenceNo,
+            status: invoice.status,
+            payment_method: invoice.payment_method,
+            taxableAmount: invoice.taxableAmount,
+            totalDiscount: invoice.totalDiscount,
+            vat: invoice.vat,
+            TotalAmount: invoice.TotalAmount,
+            roundOff: invoice.roundOff,
+            items: formattedItems,
+            billFrom: billFromDetails,
+            billTo: billToDetails,
+            bank: bankDetails,
+            notes: invoice.notes,
+            termsAndCondition: invoice.termsAndCondition,
+            isRecurring: invoice.isRecurring,
+            recurring: invoice.isRecurring ? invoice.recurring : null,
+            recurringDuration: invoice.isRecurring ? invoice.recurringDuration : null,
+            sign_type: invoice.sign_type,
+            signature: signatureDetails,
+            createdAt: formatDate(invoice.createdAt),
+            updatedAt: formatDate(invoice.updatedAt)
+        };
+
+        res.status(200).json({
+            success: true,
+            message: 'Invoice retrieved successfully',
+            data: responseData
+        });
+
+    } catch (err) {
+        console.error('Get invoice error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching invoice',
+            error: err.message
+        });
     }
-
-    res.status(200).json({
-      message: 'Invoice retrieved successfully',
-      data: invoice
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error retrieving invoice', error: err.message });
-  }
 };
 
 const getAllInvoices = async (req, res) => {
-  try {
-    const { status, customerId, startDate, endDate } = req.query;
-    const filter = { isDeleted: false };
+    try {
+        const { 
+            page = 1, 
+            limit = 10, 
+            status, 
+            search = '',
+            customerId,
+            startDate,
+            endDate,
+            payment_method
+        } = req.query;
 
-    if (status) filter.status = status;
-    if (customerId) filter.customerId = customerId;
-    if (startDate && endDate) {
-      filter.invoiceDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
+        const userId = req.user._id;
+        const skip = (page - 1) * limit;
+
+        // Build query
+        const query = { 
+            isDeleted: false 
+        };
+
+        // Add status filter
+        if (status && ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED', 'REFUNDED'].includes(status)) {
+            query.status = status;
+        }
+
+        // Add customer filter
+        if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+            query.customerId = customerId;
+        }
+
+        // Add payment method filter
+        if (payment_method) {
+            query.payment_method = payment_method;
+        }
+
+        // Add date range filter
+        if (startDate || endDate) {
+            query.invoiceDate = {};
+            if (startDate) {
+                query.invoiceDate.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                query.invoiceDate.$lte = new Date(endDate);
+            }
+        }
+
+        // Add search filter
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { invoiceNumber: searchRegex },
+                { referenceNo: searchRegex },
+                { 'items.name': searchRegex },
+                { notes: searchRegex },
+                { 'customerId.name': searchRegex }
+            ];
+        }
+
+        // Get total count
+        const total = await Invoice.countDocuments(query);
+
+        // Get invoices with pagination and population
+        const invoices = await Invoice.find(query)
+            .populate('customerId', 'name email phone image')
+           
+            .populate('billFrom', 'name email phone companyName')
+            .populate('billTo', 'name email phone billingAddress')
+            .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode')
+            .sort({ invoiceDate: -1 })
+            .skip(skip)
+            .limit(Number(limit));
+
+        // Get the next invoice ID
+        const lastInvoice = await Invoice.findOne()
+            .sort({ invoiceNumber: -1 })
+            .select('invoiceNumber');
+        
+        let nextInvoiceNumber = 'INV-000001'; // Default if no invoices exist
+        if (lastInvoice && lastInvoice.invoiceNumber) {
+            const lastNumber = parseInt(lastInvoice.invoiceNumber.split('-')[1]);
+            nextInvoiceNumber = `INV-${String(lastNumber + 1).padStart(6, '0')}`;
+        }
+
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+        
+        const formattedInvoices = invoices.map((invoice) => {
+            // Format dates as "dd, MMM yyyy"
+            const formatDate = (date) => {
+                if (!date) return null;
+                const d = new Date(date);
+                const day = d.getDate().toString().padStart(2, '0');
+                const month = d.toLocaleString('default', { month: 'short' });
+                const year = d.getFullYear();
+                return `${day}, ${month} ${year}`;
+            };
+
+            // Customer details with image
+            const customerDetails = invoice.customerId ? {
+                id: invoice.customerId._id,
+                name: invoice.customerId.name || '',
+                email: invoice.customerId.email || null,
+                phone: invoice.customerId.phone || null,
+                image: invoice.customerId.image 
+                    ? `${baseUrl}${invoice.customerId.image.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
+            } : null;
+
+            // BillFrom details (typically the seller/company)
+            const billFromDetails = invoice.billFrom ? {
+                id: invoice.billFrom._id,
+                name: invoice.billFrom.name || '',
+                email: invoice.billFrom.email || null,
+                phone: invoice.billFrom.phone || null,
+                companyName: invoice.billFrom.companyName || null
+            } : null;
+
+            // BillTo details (from Customer model)
+            const billToDetails = invoice.billTo ? {
+                id: invoice.billTo._id,
+                name: invoice.billTo.name || '',
+                email: invoice.billTo.email || null,
+                phone: invoice.billTo.phone || null,
+                billingAddress: invoice.billTo.billingAddress || null
+            } : null;
+
+            // Bank details
+            const bankDetails = invoice.bank ? {
+                accountHoldername: invoice.bank.accountHoldername || '',
+                bankName: invoice.bank.bankName || '',
+                branchName: invoice.bank.branchName || '',
+                accountNumber: invoice.bank.accountNumber || '',
+                IFSCCode: invoice.bank.IFSCCode || ''
+            } : null;
+
+            // Signature details
+            const signatureImage = invoice.signatureImage 
+                ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
+                : null;
+
+            const signatureDetails = invoice.sign_type === 'eSignature' ? {
+                name: invoice.signatureName || null,
+                image: signatureImage
+            } : null;
+
+            // Format items
+            const formattedItems = invoice.items.map(item => ({
+                id: item._id,
+                productId: item.productId?._id || null,
+                name: item.name || (item.productId?.name || ''),
+                description: item.productId?.description || '',
+                key: item.key || 0,
+                quantity: item.quantity,
+                units: item.units,
+                unit: item.unit ? {
+                    id: item.unit._id,
+                    name: item.unit.name,
+                    symbol: item.unit.symbol
+                } : null,
+                rate: item.rate,
+                discount: item.discount,
+                tax: item.tax,
+                taxInfo: item.taxInfo,
+                amount: item.amount,
+                discountType: item.discountType
+            }));
+
+            return {
+                id: invoice._id,
+                invoiceNumber: invoice.invoiceNumber,
+                customer: customerDetails,
+                invoiceDate: formatDate(invoice.invoiceDate),
+                dueDate: formatDate(invoice.dueDate),
+                referenceNo: invoice.referenceNo,
+                status: invoice.status,
+                payment_method: invoice.payment_method,
+                taxableAmount: invoice.taxableAmount,
+                totalDiscount: invoice.totalDiscount,
+                vat: invoice.vat,
+                TotalAmount: invoice.TotalAmount,
+                roundOff: invoice.roundOff,
+                items: formattedItems,
+                itemsCount: invoice.items.length,
+                billFrom: billFromDetails,
+                billTo: billToDetails,
+                bank: bankDetails,
+                notes: invoice.notes,
+                termsAndCondition: invoice.termsAndCondition,
+                isRecurring: invoice.isRecurring,
+                recurring: invoice.isRecurring ? invoice.recurring : null,
+                recurringDuration: invoice.isRecurring ? invoice.recurringDuration : null,
+                sign_type: invoice.sign_type,
+                signature: signatureDetails,
+                createdAt: formatDate(invoice.createdAt),
+                updatedAt: formatDate(invoice.updatedAt)
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Invoices retrieved successfully',
+            data: {
+                invoices: formattedInvoices,
+                nextInvoiceNumber,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error('List invoices error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching invoices',
+            error: err.message
+        });
     }
-
-    const invoices = await Invoice.find(filter)
-      .populate('customerId')
-      .sort({ invoiceDate: -1 });
-
-    res.status(200).json({
-      message: 'Invoices retrieved successfully',
-      count: invoices.length,
-      data: invoices
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Error retrieving invoices', error: err.message });
-  }
 };
 
 const deleteInvoice = async (req, res) => {
