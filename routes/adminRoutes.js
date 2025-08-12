@@ -42,6 +42,7 @@ const localizationController = require('@controllers/localizationController');
 const multer = require('multer');
 const quotationController = require('@controllers/Admin/Invoice/quotationController');
 const  { quotationValidator , updateQuotationValidator } = require('../validators/Admin/Invoice/quotationValidator');
+const invoiceTemplateController = require('@controllers/invoiceTemplateController');
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -184,5 +185,9 @@ router.put('/quotations/:id', protect, upload.single('signatureImage'), updateQu
 router.delete('/quotations/:id', protect, quotationController.deleteQuotation);
 router.get('/quotations', protect, quotationController.listQuotations);
 router.get('/customers-all', protect, quotationController.getAllCustomers);
+//invoicetem
+router.post('/invoice-template', protect, invoiceTemplateController.createOrUpdateTemplate);
+router.get('/invoice-template', protect, invoiceTemplateController.getAllTemplates);
+
 
 module.exports = router;
