@@ -83,7 +83,7 @@ const createInvoice = async (req, res) => {
         form_updated_tax: item.form_updated_tax
       })),
       status: 'UNPAID',
-      payment_method,
+      payment_method : 'CASH',
       taxableAmount: req.body.subTotal || taxableAmount,
       TotalAmount: req.body.grandTotal || totalAmount,
       vat: req.body.totalTax || vat,

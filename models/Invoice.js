@@ -78,7 +78,6 @@ const invoiceSchema = new mongoose.Schema({
   },
   payment_method: {
     type: String,
-    required: true
   },
   taxableAmount: {
     type: Number,
