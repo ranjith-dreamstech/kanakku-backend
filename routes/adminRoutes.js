@@ -46,6 +46,7 @@ const invoiceTemplateController = require('@controllers/invoiceTemplateControlle
 const { createInvoiceValidator } = require('../validators/Admin/Invoice/invoiceValidator');
 const invoiceController = require('@controllers/Admin/Invoice/invoiceController');
 const recurringInvoiceController = require('@controllers/Admin/Invoice/recurringInvoiceController');
+const emailSettingsController = require('@controllers/emailSettingsController');
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -201,5 +202,8 @@ router.delete('/invoices/:id', protect, invoiceController.deleteInvoice);
 router.post('/recurring-invoices', protect, upload.single('signatureImage'), recurringInvoiceController.createRecurringInvoice);
 router.get('/recurring-invoices', protect, recurringInvoiceController.getAllRecurringInvoices);
 router.get('/recurring-invoices/:id', protect, recurringInvoiceController.getChildInvoices);
+//Email Settings
+router.post("/email-settings", emailSettingsController.createOrUpdateEmailSettings);
+router.get("/email-settings", emailSettingsController.getEmailSettings);
 
 module.exports = router;

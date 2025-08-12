@@ -198,6 +198,12 @@ const createPurchase = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    
+
+    res.status(201).json({
+      message: 'Purchase created successfully',
+      data: { purchase }
+    });
     if (billToUser?.email && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
       try {
         await sendMail({
@@ -218,11 +224,6 @@ const createPurchase = async (req, res) => {
         console.error("Failed to send purchase email:", emailErr.message);
       }
     }
-
-    res.status(201).json({
-      message: 'Purchase created successfully',
-      data: { purchase }
-    });
 
   } catch (err) {
     await session.abortTransaction();

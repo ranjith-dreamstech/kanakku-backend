@@ -6,7 +6,7 @@ const Product = require('@models/Product');
 const User = require('@models/User');
 const Inventory = require('@models/Inventory');
 const { body, validationResult } = require('express-validator');
-const { sendMail } = require("../utils/mailer");
+const { sendMail } = require("@utils/mailer");
 
 const createDebitNote = async (req, res) => {
   try {
@@ -151,8 +151,12 @@ const createDebitNote = async (req, res) => {
       }
     }
 
-    // ---- Send Email (Optional) ----
-    if (billToUser?.email && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
+    res.status(201).json({
+      message: 'Debit note created successfully',
+      data: { debitNote }
+    });
+
+     if (billToUser?.email && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
       try {
         await sendMail({
           from: `"Your Company" <${process.env.SMTP_EMAIL}>`,
@@ -172,11 +176,6 @@ const createDebitNote = async (req, res) => {
         console.error("Failed to send debit note email:", emailErr.message);
       }
     }
-
-    res.status(201).json({
-      message: 'Debit note created successfully',
-      data: { debitNote }
-    });
 
   } catch (err) {
     console.error(err);
