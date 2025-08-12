@@ -26,6 +26,7 @@ const createQuotation = async (req, res) => {
             signatureName,
             billFrom,
             billTo,
+            bank,
             convert_type
         } = req.body;
 
@@ -100,6 +101,7 @@ const createQuotation = async (req, res) => {
                 amount: item.amount
             })),
             status: status || 'draft',
+            bank: bank || null,
             paymentTerms: paymentTerms || '',
             taxableAmount: req.body.subTotal || taxableAmount,
             totalDiscount: req.body.totalDiscount || totalDiscount,
@@ -155,7 +157,8 @@ const getQuotationById = async (req, res) => {
             .populate('billFrom', 'firstName lastName email phone profileImage address')
             .populate('billTo', 'name email phone image billingAddress')
             .populate('items.id', 'name description price unit')
-            .populate('signatureId', 'signatureName');
+            .populate('signatureId', 'signatureName')
+            .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode'); // Add bank population
 
         if (!quotation) {
             return res.status(404).json({
@@ -164,12 +167,12 @@ const getQuotationById = async (req, res) => {
             });
         }
 
-        // Format dates as "dd, MMM yyyy"
+        // Format dates as "dd/MM/yyyy"
         const formatDate = (date) => {
             if (!date) return null;
             const d = new Date(date);
             const day = d.getDate().toString().padStart(2, '0');
-            const month = (d.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-indexed
+            const month = (d.getMonth() + 1).toString().padStart(2, '0');
             const year = d.getFullYear();
             return `${day}/${month}/${year}`;
         };
@@ -186,7 +189,7 @@ const getQuotationById = async (req, res) => {
             billingAddress: quotation.customerId.billingAddress || null
         } : null;
 
-        // Format billFrom details (from User model)
+        // Format billFrom details
         const billFromDetails = quotation.billFrom ? {
             id: quotation.billFrom._id,
             name: `${quotation.billFrom.firstName || ''} ${quotation.billFrom.lastName || ''}`.trim(),
@@ -199,7 +202,7 @@ const getQuotationById = async (req, res) => {
             user_type: quotation.billFrom.user_type || 1
         } : null;
 
-        // Format billTo details (from Customer model)
+        // Format billTo details
         const billToDetails = quotation.billTo ? {
             id: quotation.billTo._id,
             name: quotation.billTo.name || '',
@@ -209,6 +212,15 @@ const getQuotationById = async (req, res) => {
                 ? `${baseUrl}${quotation.billTo.image.replace(/\\/g, '/')}`
                 : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Profile',
             billingAddress: quotation.billTo.billingAddress || null
+        } : null;
+
+        // Format bank details
+        const bankDetails = quotation.bank ? {
+            accountHoldername: quotation.bank.accountHoldername || '',
+            bankName: quotation.bank.bankName || '',
+            branchName: quotation.bank.branchName || '',
+            accountNumber: quotation.bank.accountNumber || '',
+            IFSCCode: quotation.bank.IFSCCode || ''
         } : null;
 
         // Format signature details
@@ -258,6 +270,7 @@ const getQuotationById = async (req, res) => {
             items: formattedItems,
             billFrom: billFromDetails,
             billTo: billToDetails,
+            bank: bankDetails, // Include bank details in response
             notes: quotation.notes,
             termsAndCondition: quotation.termsAndCondition,
             sign_type: quotation.sign_type,
@@ -297,9 +310,6 @@ const updateQuotation = async (req, res) => {
             throw new Error('Quotation not found');
         }
 
-        // Validate signature data if being updated
-
-
         // Update fields
         if (updateData.quotationDate) quotation.quotationDate = new Date(updateData.quotationDate);
         if (updateData.expiryDate) quotation.expiryDate = new Date(updateData.expiryDate);
@@ -311,6 +321,7 @@ const updateQuotation = async (req, res) => {
         if (updateData.sign_type !== undefined) quotation.sign_type = updateData.sign_type;
         if (updateData.signatureId !== undefined) quotation.signatureId = updateData.signatureId;
         if (updateData.convert_type !== undefined) quotation.convert_type = updateData.convert_type;
+        if (updateData.bank !== undefined) quotation.bank = updateData.bank || null;
 
         // Handle signature image if being updated
         if (updateData.sign_type === 'eSignature' && req.file) {
@@ -473,6 +484,7 @@ const listQuotations = async (req, res) => {
             .populate('customerId', 'name email phone image')
             .populate('signatureId', 'signatureName')
             .populate('billTo', 'name email phone image billingAddress')
+            .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode') // Add bank population
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(Number(limit));
@@ -524,6 +536,15 @@ const listQuotations = async (req, res) => {
                 billingAddress: quotation.billTo.billingAddress || null
             } : null;
 
+            // Bank details
+            const bankDetails = quotation.bank ? {
+                accountHoldername: quotation.bank.accountHoldername || '',
+                bankName: quotation.bank.bankName || '',
+                branchName: quotation.bank.branchName || '',
+                accountNumber: quotation.bank.accountNumber || '',
+                IFSCCode: quotation.bank.IFSCCode || ''
+            } : null;
+
             // Signature details
             const signatureImage = quotation.signatureImage 
                 ? `${baseUrl}${quotation.signatureImage.replace(/\\/g, '/')}`
@@ -553,6 +574,7 @@ const listQuotations = async (req, res) => {
                 itemsCount: quotation.items.length,
                 billFrom: quotation.billFrom,
                 billTo: billToDetails,
+                bank: bankDetails, // Include bank details in response
                 notes: quotation.notes,
                 sign_type: quotation.sign_type,
                 signature: signatureDetails,
