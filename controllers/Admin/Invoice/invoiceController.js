@@ -80,7 +80,7 @@ const createInvoice = async (req, res) => {
         form_updated_rate: item.form_updated_rate,
         form_updated_tax: item.form_updated_tax
       })),
-      status: 'DRAFT',
+      status: 'UNPAID',
       payment_method,
       taxableAmount: calculatedTaxableAmount,
       TotalAmount: calculatedTotalAmount,
