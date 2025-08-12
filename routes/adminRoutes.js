@@ -43,6 +43,8 @@ const multer = require('multer');
 const quotationController = require('@controllers/Admin/Invoice/quotationController');
 const  { quotationValidator , updateQuotationValidator } = require('../validators/Admin/Invoice/quotationValidator');
 const invoiceTemplateController = require('@controllers/invoiceTemplateController');
+const { createInvoiceValidator } = require('../validators/Admin/Invoice/invoiceValidator');
+const invoiceController = require('@controllers/Admin/Invoice/invoiceController');
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -185,9 +187,14 @@ router.put('/quotations/:id', protect, upload.single('signatureImage'), updateQu
 router.delete('/quotations/:id', protect, quotationController.deleteQuotation);
 router.get('/quotations', protect, quotationController.listQuotations);
 router.get('/customers-all', protect, quotationController.getAllCustomers);
-//invoicetem
+//invoicetemplate
 router.post('/invoice-template', protect, invoiceTemplateController.createOrUpdateTemplate);
-router.get('/invoice-template', protect, invoiceTemplateController.getAllTemplates);
-
+router.get('/invoice-templates', protect, invoiceTemplateController.getAllTemplates);
+//Invoice
+router.post('/invoices', protect, upload.single('signatureImage'), createInvoiceValidator, invoiceController.createInvoice);
+router.get('/invoices', protect, invoiceController.getAllInvoices);
+router.get('/invoices/:id', protect, invoiceController.getInvoice);
+router.put('/invoices/:id', protect, upload.single('signatureImage'), createInvoiceValidator, invoiceController.updateInvoice);
+router.delete('/invoices/:id', protect, invoiceController.deleteInvoice);
 
 module.exports = router;

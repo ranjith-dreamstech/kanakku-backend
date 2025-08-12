@@ -85,14 +85,6 @@ exports.getMyTemplate = async (req, res) => {
 // Get all invoice templates (admin only)
 exports.getAllTemplates = async (req, res) => {
   try {
-    // Check if user is admin (you need to implement this check based on your auth system)
-    if (!req.user.isAdmin) {
-      return res.status(403).json({
-        success: false,
-        message: 'Forbidden - Admin access required'
-      });
-    }
-
     const templates = await InvoiceTemplate.find().populate('userId', 'username email');
     res.status(200).json({
       success: true,
