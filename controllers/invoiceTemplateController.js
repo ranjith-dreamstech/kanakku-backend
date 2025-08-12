@@ -1,10 +1,9 @@
 const InvoiceTemplate = require('@models/invoiceTemplate');
 
-// Create or update invoice template (single entry per user)
 exports.createOrUpdateTemplate = async (req, res) => {
   try {
     const { default_invoice_template } = req.body;
-    const userId = req.user; // Get user ID from authenticated user
+    const userId = req.user;
 
     if (!userId) {
       return res.status(401).json({
@@ -13,12 +12,10 @@ exports.createOrUpdateTemplate = async (req, res) => {
       });
     }
 
-    // Check if template already exists for this user
     const existingTemplate = await InvoiceTemplate.findOne({ userId });
 
     let template;
     if (existingTemplate) {
-      // Update existing template
       template = await InvoiceTemplate.findOneAndUpdate(
         { userId },
         { default_invoice_template, updatedAt: new Date() },
@@ -30,7 +27,6 @@ exports.createOrUpdateTemplate = async (req, res) => {
         data: template
       });
     } else {
-      // Create new template
       template = await InvoiceTemplate.create({
         default_invoice_template,
         userId
@@ -50,7 +46,6 @@ exports.createOrUpdateTemplate = async (req, res) => {
   }
 };
 
-// Get current user's template
 exports.getMyTemplate = async (req, res) => {
   try {
     const userId = req.user;
@@ -82,7 +77,6 @@ exports.getMyTemplate = async (req, res) => {
   }
 };
 
-// Get all invoice templates (admin only)
 exports.getAllTemplates = async (req, res) => {
   try {
     const templates = await InvoiceTemplate.find().populate('userId', 'username email');

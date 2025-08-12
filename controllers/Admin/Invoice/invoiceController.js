@@ -1,7 +1,5 @@
 const mongoose = require('mongoose');
 const Invoice = require('@models/Invoice');
-const Customer = require('@models/Customer');
-const Product = require('@models/Product');
 const { validationResult } = require('express-validator');
 
 const createInvoice = async (req, res) => {
@@ -41,7 +39,6 @@ const createInvoice = async (req, res) => {
       userId
     } = req.body;
 
-    // Calculate amounts if not provided
     let calculatedTaxableAmount = taxableAmount || 0;
     let calculatedVat = vat || 0;
     let calculatedTotalDiscount = totalDiscount || 0;
@@ -54,13 +51,11 @@ const createInvoice = async (req, res) => {
       calculatedTotalAmount = calculatedTaxableAmount + calculatedVat - calculatedTotalDiscount;
     }
 
-    // Handle signature image if eSignature
     let signatureImage = null;
     if (sign_type === 'eSignature' && req.file) {
       signatureImage = req.file.path;
     }
 
-    // Create invoice
     const invoice = new Invoice({
       customerId,
       invoiceDate: new Date(invoiceDate),
@@ -139,7 +134,6 @@ const updateInvoice = async (req, res) => {
     const invoiceId = req.params.id;
     const updateData = req.body;
 
-    // Handle signature image if eSignature
     if (updateData.sign_type === 'eSignature' && req.file) {
       updateData.signatureImage = req.file.path;
     }
@@ -211,7 +205,6 @@ const getInvoice = async (req, res) => {
             billingAddress: invoice.customerId.billingAddress || null
         } : null;
 
-        // BillFrom details (typically the seller/company)
         const billFromDetails = invoice.billFrom ? {
             id: invoice.billFrom._id,
             name: invoice.billFrom.name || '',
@@ -221,7 +214,6 @@ const getInvoice = async (req, res) => {
             address: invoice.billFrom.address || null
         } : null;
 
-        // BillTo details (from Customer model)
         const billToDetails = invoice.billTo ? {
             id: invoice.billTo._id,
             name: invoice.billTo.name || '',
@@ -338,27 +330,22 @@ const getAllInvoices = async (req, res) => {
         const userId = req.user._id;
         const skip = (page - 1) * limit;
 
-        // Build query
         const query = { 
             isDeleted: false 
         };
 
-        // Add status filter
         if (status && ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED', 'REFUNDED'].includes(status)) {
             query.status = status;
         }
 
-        // Add customer filter
         if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
             query.customerId = customerId;
         }
 
-        // Add payment method filter
         if (payment_method) {
             query.payment_method = payment_method;
         }
 
-        // Add date range filter
         if (startDate || endDate) {
             query.invoiceDate = {};
             if (startDate) {

@@ -37,7 +37,7 @@ const invoiceSchema = new mongoose.Schema({
       type: String,
       required: false
     },
-    qty: {  // Changed from 'qty' to 'quantity' for consistency
+    qty: {
       type: Number,
       required: false
     },
@@ -119,6 +119,15 @@ const invoiceSchema = new mongoose.Schema({
     enum: ['daily', 'weekly', 'monthly', 'yearly'],
     default: 'monthly'
   },
+  parentInvoice: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Invoice',
+    default: null
+  },
+  nextRecurringDate: {
+    type: Date,
+    default: null
+  },
   sign_type: {
     type: String,
     enum: ['none', 'digitalSignature', 'eSignature'],
@@ -155,7 +164,6 @@ const invoiceSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Pre-save hook to generate invoice number
 invoiceSchema.pre('save', async function (next) {
   if (!this.invoiceNumber) {
     try {

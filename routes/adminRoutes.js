@@ -45,6 +45,7 @@ const  { quotationValidator , updateQuotationValidator } = require('../validator
 const invoiceTemplateController = require('@controllers/invoiceTemplateController');
 const { createInvoiceValidator } = require('../validators/Admin/Invoice/invoiceValidator');
 const invoiceController = require('@controllers/Admin/Invoice/invoiceController');
+const recurringInvoiceController = require('@controllers/Admin/Invoice/recurringInvoiceController');
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -194,7 +195,11 @@ router.get('/invoice-templates', protect, invoiceTemplateController.getAllTempla
 router.post('/invoices', protect, upload.single('signatureImage'), createInvoiceValidator, invoiceController.createInvoice);
 router.get('/invoices', protect, invoiceController.getAllInvoices);
 router.get('/invoices/:id', protect, invoiceController.getInvoice);
-router.put('/invoices/:id', protect, upload.single('signatureImage'), createInvoiceValidator, invoiceController.updateInvoice);
+router.put('/invoices/:id', protect, upload.single('signatureImage'), invoiceController.updateInvoice);
 router.delete('/invoices/:id', protect, invoiceController.deleteInvoice);
+//recurring invoice
+router.post('/recurring-invoices', protect, upload.single('signatureImage'), recurringInvoiceController.createRecurringInvoice);
+router.get('/recurring-invoices', protect, recurringInvoiceController.getAllRecurringInvoices);
+router.get('/recurring-invoices/:id', protect, recurringInvoiceController.getChildInvoices);
 
 module.exports = router;
