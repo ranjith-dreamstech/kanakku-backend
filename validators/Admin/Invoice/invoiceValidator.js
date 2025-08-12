@@ -3,16 +3,6 @@ const Invoice = require('@models/Invoice');
 const Customer = require('@models/Customer');
 
 const createInvoiceValidator = [
-  body('customerId')
-    .notEmpty().withMessage('Customer ID is required')
-    .isMongoId().withMessage('Invalid Customer ID')
-    .custom(async (value) => {
-      const customer = await Customer.findById(value);
-      if (!customer) {
-        throw new Error('Customer not found');
-      }
-      return true;
-    }),
 
   body('invoiceDate')
     .notEmpty().withMessage('Invoice date is required')
@@ -33,9 +23,6 @@ const createInvoiceValidator = [
     .notEmpty().withMessage('Bill to is required')
     .isMongoId().withMessage('Invalid Bill To ID'),
 
-  body('userId')
-    .notEmpty().withMessage('User ID is required')
-    .isMongoId().withMessage('Invalid User ID')
 ];
 
 const updateInvoiceValidator = [

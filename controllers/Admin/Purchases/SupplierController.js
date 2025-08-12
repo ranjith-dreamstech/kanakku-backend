@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('@models/User');
-const fs = require('fs'); // Add this at the top of your file
-const path = require('path'); // Useful for path operations
+const fs = require('fs');
+const path = require('path');
 
 //create
 const createSupplier = async (req, res) => {

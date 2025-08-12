@@ -189,6 +189,7 @@ router.put('/quotations/:id', protect, upload.single('signatureImage'), updateQu
 router.delete('/quotations/:id', protect, quotationController.deleteQuotation);
 router.get('/quotations', protect, quotationController.listQuotations);
 router.get('/customers-all', protect, quotationController.getAllCustomers);
+router.get('/quotations-minimal', protect, quotationController.getAllCustomers);
 //invoicetemplate
 router.post('/invoice-template', protect, invoiceTemplateController.createOrUpdateTemplate);
 router.get('/invoice-templates', protect, invoiceTemplateController.getAllTemplates);

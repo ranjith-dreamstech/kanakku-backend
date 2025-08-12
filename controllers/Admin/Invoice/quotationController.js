@@ -2,8 +2,6 @@ const mongoose = require('mongoose');
 const Quotation = require('@models/Quotation');
 const User = require('@models/User');
 const Product = require('@models/Product');
-const Signature = require('@models/Signature');
-const TaxGroup = require('@models/TaxGroup');
 const Customer = require('@models/Customer');
 
 const createQuotation = async (req, res) => {
@@ -609,6 +607,70 @@ const listQuotations = async (req, res) => {
     }
 };
 
+const listQuotationsMinimal = async (req, res) => {
+    try {
+        const { search = '' } = req.query;
+        const userId = req.user;
+
+        // Build base query
+        const query = {
+            userId,
+            isDeleted: false
+        };
+
+        // Add search filter
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { quotationId: searchRegex },
+                { referenceNo: searchRegex },
+                { 'customerId.name': searchRegex },
+                { 'items.name': searchRegex }
+            ];
+        }
+
+        const quotations = await Quotation.find(query)
+            .select('_id quotationId referenceNo quotationDate status TotalAmount customerId')
+            .populate('customerId', 'name') // Minimal customer info
+            .sort({ quotationDate: -1 })
+            .limit(search ? 0 : 20); // Limit to 20 if no search
+
+        const formattedQuotations = quotations.map(q => ({
+            id: q._id,
+            quotationId: q.quotationId,
+            referenceNo: q.referenceNo,
+            quotationDate: q.quotationDate,
+            status: q.status,
+            totalAmount: q.TotalAmount,
+            customer: q.customerId ? {
+                id: q.customerId._id,
+                name: q.customerId.name
+            } : null
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: search
+                ? 'Search results for quotations retrieved successfully'
+                : 'Last 20 quotations retrieved successfully',
+            data: formattedQuotations,
+            meta: {
+                count: quotations.length,
+                isSearchResult: !!search
+            }
+        });
+
+    } catch (err) {
+        console.error('List minimal quotations error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching quotations',
+            error: err.message
+        });
+    }
+};
+
+
 const getAllCustomers = async (req, res) => {
     try {
         const { search = '', status } = req.query;
@@ -673,6 +735,6 @@ module.exports = {
     updateQuotation,
     deleteQuotation,
     listQuotations,
+    listQuotationsMinimal,
     getAllCustomers,
-    
 };

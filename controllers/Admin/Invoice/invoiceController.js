@@ -15,7 +15,6 @@ const createInvoice = async (req, res) => {
     }
 
     const { 
-      customerId,
       invoiceDate,
       dueDate,
       referenceNo,
@@ -36,8 +35,11 @@ const createInvoice = async (req, res) => {
       signatureName,
       billFrom,
       billTo,
-      userId
+      
     } = req.body;
+
+    const customerId = req.user;
+    const userId = req.user;
 
     let calculatedTaxableAmount = taxableAmount || 0;
     let calculatedVat = vat || 0;
