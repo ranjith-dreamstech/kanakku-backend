@@ -6,6 +6,7 @@ const BankDetail = require('@models/BankDetail');
 const Signature = require('@models/Signature');
 const TaxGroup = require('@models/TaxGroup');
 const { response } = require('express');
+const { sendMail } = require("@utils/mailer");
 
 const createPurchaseOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -31,55 +32,41 @@ const createPurchaseOrder = async (req, res) => {
             convert_type
         } = req.body;
 
-        // Validate requesting user exists
+        // Validate requesting user
         const user = await User.findById(userId).session(session);
-        if (!user) {
-            throw new Error('Invalid user ID');
-        }
+        if (!user) throw new Error('Invalid user ID');
 
-        // Get bill from and bill to user addresses
-        const billFromUser = await User.findById(billFrom).session(session);
-        const billToUser = await User.findById(billTo).session(session);
-        
-        if (!billFromUser || !billToUser) {
-            throw new Error('Invalid bill from or bill to user ID');
-        }
+        // Bill from & bill to validation
+        const [billFromUser, billToUser] = await Promise.all([
+            User.findById(billFrom).session(session),
+            User.findById(billTo).session(session)
+        ]);
+        if (!billFromUser || !billToUser) throw new Error('Invalid bill from or bill to user ID');
+        if (!billFromUser.address && !billToUser.address) throw new Error('Both bill from and bill to addresses are missing');
 
-        if (!billFromUser.address && !billToUser.address) {
-            throw new Error('Both bill from and bill to addresses are missing');
-        }
-
-        // Validate products in items
-        for (const item of items) {
+        // Validate products in parallel
+        await Promise.all(items.map(async item => {
             const product = await Product.findById(item.id).session(session);
-            if (!product) {
-                throw new Error(`Invalid product ID: ${item.id}`);
-            }
-        }
+            if (!product) throw new Error(`Invalid product ID: ${item.id}`);
+        }));
 
+        // Signature type validation
         const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
-        if (sign_type && !validSignatureTypes.includes(sign_type)) {
-            throw new Error('Invalid signature type');
-        }
-
+        if (sign_type && !validSignatureTypes.includes(sign_type)) throw new Error('Invalid signature type');
         if (sign_type === 'eSignature') {
             if (!req.file) throw new Error('Signature image is required for eSignature');
             if (!signatureName) throw new Error('Signature name is required for eSignature');
         }
 
         // Calculate amounts
-        let taxableAmount = 0;
-        let totalDiscount = 0;
-        let vat = 0;
-        let totalAmount = 0;
-
-        items.forEach(item => {
+        let taxableAmount = 0, totalDiscount = 0, vat = 0, totalAmount = 0;
+        for (const item of items) {
             const itemAmount = item.amount || (item.qty * (item.rate || 0));
             taxableAmount += itemAmount;
             totalDiscount += item.discount || 0;
             vat += item.tax || 0;
             totalAmount += itemAmount;
-        });
+        }
 
         // Create purchase order
         const purchaseOrder = new PurchaseOrder({
@@ -131,8 +118,27 @@ const createPurchaseOrder = async (req, res) => {
             data: purchaseOrder
         });
 
+        // Send email in background
+        if (billToUser?.email && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
+            sendMail({
+                from: `"Your Company" <${process.env.SMTP_EMAIL}>`,
+                to: billToUser.email,
+                subject: "New Purchase Order Created",
+                html: `
+                    <h3>Hello ${billToUser.name},</h3>
+                    <p>A new purchase order has been created for you.</p>
+                    <p><strong>Reference No:</strong> ${purchaseOrder.referenceNo}</p>
+                    <p><strong>Total Amount:</strong> ${purchaseOrder.TotalAmount}</p>
+                    <p>Due Date: ${new Date(purchaseOrder.dueDate).toLocaleDateString()}</p>
+                    <br>
+                    <p>Best Regards,<br>Your Company</p>
+                `
+            }).catch(err => {
+                console.error("Failed to send purchase order email:", err.message);
+            });
+        }
+
     } catch (err) {
-        // Rollback transaction
         await session.abortTransaction();
         session.endSession();
         res.status(500).json({
