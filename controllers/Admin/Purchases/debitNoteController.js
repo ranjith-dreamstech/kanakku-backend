@@ -6,8 +6,8 @@ const Product = require('@models/Product');
 const User = require('@models/User');
 const Inventory = require('@models/Inventory');
 const { body, validationResult } = require('express-validator');
+const { sendMail } = require("../utils/mailer");
 
-// Create a new debit note
 const createDebitNote = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -55,12 +55,6 @@ const createDebitNote = async (req, res) => {
       return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
     }
 
-    // Validate created by user
-    // const createdByUser = await User.findById(createdBy);
-    // if (!createdByUser) {
-    //   return res.status(422).json({ message: 'Invalid created by user ID' });
-    // }
-
     // Validate products in items
     for (const item of items) {
       const product = await Product.findById(item.id);
@@ -75,7 +69,6 @@ const createDebitNote = async (req, res) => {
       return res.status(400).json({ message: 'Invalid signature type' });
     }
 
-    // Validate signature data if eSignature is selected
     if (sign_type === 'eSignature') {
       if (!req.file) {
         return res.status(400).json({ message: 'Signature image is required for eSignature' });
@@ -86,18 +79,9 @@ const createDebitNote = async (req, res) => {
     }
 
     // Calculate amounts
-    const taxableAmount = items.reduce((sum, item) => {
-      return sum + (item.quantity * item.rate);
-    }, 0);
-
-    const totalDiscount = items.reduce((sum, item) => {
-      return sum + (item.discount || 0);
-    }, 0);
-
-    const totalTax = items.reduce((sum, item) => {
-      return sum + (item.tax || 0);
-    }, 0);
-
+    const taxableAmount = items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
+    const totalDiscount = items.reduce((sum, item) => sum + (item.discount || 0), 0);
+    const totalTax = items.reduce((sum, item) => sum + (item.tax || 0), 0);
     const totalAmount = taxableAmount + totalTax - totalDiscount;
     const balanceAmount = totalAmount - paidAmount;
 
@@ -145,26 +129,14 @@ const createDebitNote = async (req, res) => {
 
     await debitNote.save();
 
-    // If status is approved, update inventory
+    // Update inventory if approved
     if (status === 'approved') {
       for (const item of items) {
-        let inventory = await Inventory.findOne({ 
-          productId: item.productId, 
-          userId 
-        });
-
+        let inventory = await Inventory.findOne({ productId: item.productId, userId });
         if (!inventory) {
-          inventory = new Inventory({
-            productId: item.productId,
-            userId,
-            quantity: 0
-          });
+          inventory = new Inventory({ productId: item.productId, userId, quantity: 0 });
         }
-
-        // Reduce quantity (since it's a debit note)
         inventory.quantity -= item.quantity;
-
-        // Add to inventory history
         inventory.inventory_history.push({
           unitId: item.unit,
           quantity: inventory.quantity,
@@ -175,42 +147,37 @@ const createDebitNote = async (req, res) => {
           referenceType: 'debit_note',
           createdBy: userId
         });
-
         await inventory.save();
+      }
+    }
+
+    // ---- Send Email (Optional) ----
+    if (billToUser?.email && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
+      try {
+        await sendMail({
+          from: `"Your Company" <${process.env.SMTP_EMAIL}>`,
+          to: billToUser.email,
+          subject: "New Debit Note Created",
+          html: `
+            <h3>Hello ${billToUser.name},</h3>
+            <p>A new debit note has been created for you.</p>
+            <p><strong>Reference No:</strong> ${debitNote.referenceNo}</p>
+            <p><strong>Total Amount:</strong> ${debitNote.totalAmount}</p>
+            <p>Debit Note Date: ${new Date(debitNote.debitNoteDate).toLocaleDateString()}</p>
+            <br>
+            <p>Best Regards,<br>Your Company</p>
+          `
+        });
+      } catch (emailErr) {
+        console.error("Failed to send debit note email:", emailErr.message);
       }
     }
 
     res.status(201).json({
       message: 'Debit note created successfully',
-      data: {
-        debitNote: {
-          id: debitNote._id,
-          debitNoteId: debitNote.debitNoteId,
-          purchaseId: debitNote.purchaseId,
-          debitNoteDate: debitNote.debitNoteDate,
-          status: debitNote.status,
-          totalAmount: debitNote.totalAmount,
-          paidAmount: debitNote.paidAmount,
-          balanceAmount: debitNote.balanceAmount,
-          sign_type: debitNote.sign_type,
-          signatureName: debitNote.signatureName,
-          items: debitNote.items.map(item => ({
-            productId: item.productId,
-            name: item.name,
-            unit: item.unit,
-            quantity: item.quantity,
-            rate: item.rate,
-            discount: item.discount,
-            tax: item.tax,
-            tax_group_id: item.tax_group_id,
-            discount_type: item.discount_type,
-            discount_value: item.discount_value,
-            amount: item.amount,
-            reason: item.reason
-          }))
-        }
-      }
+      data: { debitNote }
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ 

@@ -6,6 +6,7 @@ const Inventory = require('@models/Inventory');
 const Product = require('@models/Product');
 const User = require('@models/User');
 const { body, validationResult } = require('express-validator');
+const { sendMail } = require("@utils/mailer");
 
 const createPurchase = async (req, res) => {
   const session = await mongoose.startSession();
@@ -43,7 +44,6 @@ const createPurchase = async (req, res) => {
       sp_paid_amount
     } = req.body;
 
-    // Validate bill from and bill to users
     const billFromUser = await User.findById(billFrom).session(session);
     const billToUser = await User.findById(billTo).session(session);
     if (!billFromUser || !billToUser) {
@@ -52,7 +52,6 @@ const createPurchase = async (req, res) => {
       return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
     }
 
-    // Validate products in items
     for (const item of items) {
       const product = await Product.findById(item.id).session(session);
       if (!product) {
@@ -62,7 +61,6 @@ const createPurchase = async (req, res) => {
       }
     }
 
-    // Validate signature type
     const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
     if (sign_type && !validSignatureTypes.includes(sign_type)) {
       await session.abortTransaction();
@@ -83,7 +81,6 @@ const createPurchase = async (req, res) => {
       }
     }
 
-    // Calculations
     const calculatedSubTotal = subTotal || items.reduce((sum, item) => sum + (item.amount || (item.quantity * (item.rate || 0))), 0);
     const calculatedTotalDiscount = totalDiscount || items.reduce((sum, item) => sum + (item.discount || 0), 0);
     const calculatedTotalTax = totalTax || items.reduce((sum, item) => sum + (item.tax || 0), 0);
@@ -104,14 +101,12 @@ const createPurchase = async (req, res) => {
       }
     }
 
-    // Generate purchaseId if missing
     let purchaseId = req.body.purchaseId;
     if (!purchaseId) {
       const count = await PurchaseOrder.countDocuments().session(session);
       purchaseId = `PO-${String(count + 1).padStart(6, '0')}`;
     }
 
-    // Create purchase
     const purchase = new Purchase({
       purchaseOrderId,
       vendorId: billTo,
@@ -155,7 +150,6 @@ const createPurchase = async (req, res) => {
 
     await purchase.save({ session });
 
-    // Update purchase order
     if (purchaseOrderId) {
       await PurchaseOrder.findOneAndUpdate(
         { purchaseOrderId },
@@ -164,7 +158,6 @@ const createPurchase = async (req, res) => {
       );
     }
 
-    // Create supplier payment if applicable
     if (status === 'paid' || status === 'partially_paid') {
       const supplierPayment = new SupplierPayment({
         purchaseId: purchase._id,
@@ -181,7 +174,6 @@ const createPurchase = async (req, res) => {
       await supplierPayment.save({ session });
     }
 
-    // Update inventory if paid
     if (status === 'paid' || status === 'partially_paid') {
       for (const item of items) {
         let inventory = await Inventory.findOne({ productId: item.id, userId }).session(session);
@@ -206,11 +198,30 @@ const createPurchase = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
+    if (billToUser?.email && process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
+      try {
+        await sendMail({
+          from: `"Your Company" <${process.env.SMTP_EMAIL}>`,
+          to: billToUser.email,
+          subject: "New Purchase Created",
+          html: `
+            <h3>Hello ${billToUser.name},</h3>
+            <p>A new purchase has been created for you.</p>
+            <p><strong>Reference No:</strong> ${purchase.referenceNo}</p>
+            <p><strong>Total Amount:</strong> ${purchase.totalAmount}</p>
+            <p>Purchase Date: ${new Date(purchase.purchaseDate).toLocaleDateString()}</p>
+            <br>
+            <p>Best Regards,<br>Your Company</p>
+          `
+        });
+      } catch (emailErr) {
+        console.error("Failed to send purchase email:", emailErr.message);
+      }
+    }
+
     res.status(201).json({
       message: 'Purchase created successfully',
-      data: {
-        purchase
-      }
+      data: { purchase }
     });
 
   } catch (err) {
