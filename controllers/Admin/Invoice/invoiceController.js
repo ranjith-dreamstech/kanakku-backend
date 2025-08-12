@@ -378,7 +378,7 @@ const getAllInvoices = async (req, res) => {
             .populate('customerId', 'name email phone image')
            
             .populate('billFrom', 'name email phone companyName')
-            .populate('billTo', 'name email phone billingAddress')
+            .populate('billTo', 'name email phone billingAddress image')
             .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode')
             .sort({ invoiceDate: -1 })
             .skip(skip)
