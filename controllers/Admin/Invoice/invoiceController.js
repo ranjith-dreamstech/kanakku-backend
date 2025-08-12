@@ -434,7 +434,10 @@ const getAllInvoices = async (req, res) => {
                 name: invoice.billTo.name || '',
                 email: invoice.billTo.email || null,
                 phone: invoice.billTo.phone || null,
-                billingAddress: invoice.billTo.billingAddress || null
+                billingAddress: invoice.billTo.billingAddress || null,
+                image: invoice.billTo.image 
+                      ? `${baseUrl}${invoice.billTo.image.replace(/\\/g, '/')}`
+                      : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer' 
             } : null;
 
             // Bank details
