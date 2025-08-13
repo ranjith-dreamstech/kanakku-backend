@@ -133,12 +133,99 @@ const updateInvoice = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const invoiceId = req.params.id;
-    const updateData = req.body;
+    const { 
+      invoiceDate,
+      dueDate,
+      referenceNo,
+      items,
+      payment_method,
+      notes,
+      termsAndCondition,
+      taxableAmount,
+      TotalAmount,
+      vat,
+      totalDiscount,
+      roundOff,
+      bank,
+      isRecurring,
+      recurringDuration,
+      recurring,
+      sign_type,
+      signatureName,
+      billFrom,
+      billTo,
+      status
+    } = req.body;
 
-    if (updateData.sign_type === 'eSignature' && req.file) {
-      updateData.signatureImage = req.file.path;
+    const invoiceId = req.params.id;
+    const userId = req.user;
+
+    // Calculate amounts if not provided
+    let calculatedTaxableAmount = taxableAmount || 0;
+    let calculatedVat = vat || 0;
+    let calculatedTotalDiscount = totalDiscount || 0;
+    let calculatedTotalAmount = TotalAmount || 0;
+
+    if (!taxableAmount || !TotalAmount || !vat || !totalDiscount) {
+      calculatedTaxableAmount = items.reduce((sum, item) => sum + (item.rate * item.quantity), 0);
+      calculatedTotalDiscount = items.reduce((sum, item) => sum + (item.discount || 0), 0);
+      calculatedVat = items.reduce((sum, item) => sum + (item.tax || 0), 0);
+      calculatedTotalAmount = calculatedTaxableAmount + calculatedVat - calculatedTotalDiscount;
     }
+
+    // Handle signature image
+    let signatureImage;
+    if (sign_type === 'eSignature' && req.file) {
+      signatureImage = req.file.path;
+    } else {
+      // Get existing signature if not changing
+      const existingInvoice = await Invoice.findById(invoiceId).session(session);
+      signatureImage = existingInvoice?.signatureImage;
+    }
+
+    const updateData = {
+      invoiceDate: new Date(invoiceDate),
+      dueDate: new Date(dueDate),
+      referenceNo: referenceNo || '',
+      items: items.map(item => ({
+        productId: item.productId,
+        name: item.name,
+        key: item.key,
+        quantity: item.quantity,
+        units: item.units,
+        unit: item.unit,
+        rate: item.rate,
+        discount: item.discount,
+        tax: item.tax,
+        taxInfo: item.taxInfo,
+        amount: item.amount || (item.rate * item.quantity),
+        discountType: item.discountType,
+        isRateFormUpdated: item.isRateFormUpdated,
+        form_updated_discounttype: item.form_updated_discounttype,
+        form_updated_discount: item.form_updated_discount,
+        form_updated_rate: item.form_updated_rate,
+        form_updated_tax: item.form_updated_tax
+      })),
+      status: status || 'UNPAID',
+      payment_method: payment_method || 'CASH',
+      taxableAmount: req.body.subTotal || calculatedTaxableAmount,
+      TotalAmount: req.body.grandTotal || calculatedTotalAmount,
+      vat: req.body.totalTax || calculatedVat,
+      totalDiscount: req.body.totalDiscount || calculatedTotalDiscount,
+      roundOff: roundOff || false,
+      bank: bank || null,
+      notes: notes || '',
+      termsAndCondition: termsAndCondition || '',
+      isRecurring: isRecurring || false,
+      recurringDuration: isRecurring ? recurringDuration : 0,
+      recurring: isRecurring ? recurring : 'monthly',
+      sign_type: sign_type || 'none',
+      signatureName: sign_type === 'eSignature' ? signatureName : null,
+      signatureImage,
+      billFrom,
+      billTo,
+      userId
+    };
 
     const invoice = await Invoice.findByIdAndUpdate(
       invoiceId,
@@ -164,7 +251,10 @@ const updateInvoice = async (req, res) => {
     await session.abortTransaction();
     session.endSession();
     console.error(err);
-    res.status(500).json({ message: 'Error updating invoice', error: err.message });
+    res.status(500).json({ 
+      message: 'Error updating invoice', 
+      error: err.message 
+    });
   }
 };
 
