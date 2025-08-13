@@ -124,110 +124,73 @@ const createInvoice = async (req, res) => {
   }
 };
 
-const createInvoiceFromQuotation = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+const convertQuotationToInvoice = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    try {
-        const { quotationId } = req.params;
-        const userId = req.user;
-
-        // Validate requesting user exists
-        const user = await User.findById(userId).session(session);
-        if (!user) {
-            throw new Error('Invalid user ID');
-        }
-
-        // Find the quotation
-        const quotation = await Quotation.findById(quotationId).session(session);
-        if (!quotation) {
-            throw new Error('Quotation not found');
-        }
-
-        // Check if quotation is already converted to invoice
-        if (quotation.convert_type === 'invoice') {
-            throw new Error('This quotation has already been converted to an invoice');
-        }
-
-        // Validate bill from and bill to exist
-        const billFromUser = await User.findById(quotation.billFrom).session(session);
-        const billToCustomer = await Customer.findById(quotation.billTo).session(session);
-        
-        if (!billFromUser || !billToCustomer) {
-            throw new Error('Invalid bill from or bill to reference');
-        }
-
-        // Calculate due date (default to 30 days from now)
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 30);
-
-        // Create invoice from quotation data
-        const invoice = new Invoice({
-            customerId: quotation.customerId || quotation.billTo,
-            invoiceDate: new Date(),
-            dueDate: dueDate,
-            referenceNo: quotation.referenceNo,
-            items: quotation.items.map(item => ({
-                id: item.id,
-                name: item.name,
-                unit: item.unit,
-                qty: item.qty,
-                rate: item.rate,
-                discount: item.discount,
-                tax: item.tax,
-                tax_group_id: item.tax_group_id,
-                discount_type: item.discount_type,
-                discount_value: item.discount_value,
-                amount: item.amount
-            })),
-            status: 'UNPAID',
-            payment_method: 'CASH', // Default payment method
-            taxableAmount: quotation.taxableAmount,
-            TotalAmount: quotation.TotalAmount,
-            vat: quotation.vat,
-            totalDiscount: quotation.totalDiscount,
-            roundOff: quotation.roundOff,
-            bank: quotation.bank,
-            notes: quotation.notes,
-            termsAndCondition: quotation.termsAndCondition,
-            sign_type: quotation.sign_type,
-            signatureName: quotation.signatureName,
-            signatureImage: quotation.signatureImage,
-            billFrom: quotation.billFrom,
-            billTo: quotation.billTo,
-            userId: quotation.userId,
-            sourceQuotation: quotationId // Reference to the original quotation
-        });
-
-        // Save the invoice
-        await invoice.save({ session });
-
-        // Update the quotation to mark it as converted to invoice
-        quotation.convert_type = 'invoice';
-        quotation.linkedInvoice = invoice._id; // Reference to the new invoice
-        await quotation.save({ session });
-
-        // Commit transaction
-        await session.commitTransaction();
-        session.endSession();
-
-        res.status(201).json({
-            message: 'Invoice created from quotation successfully',
-            data: {
-                invoice,
-                quotation
-            }
-        });
-
-    } catch (err) {
-        // Rollback transaction
-        await session.abortTransaction();
-        session.endSession();
-        res.status(500).json({
-            message: 'Error creating invoice from quotation',
-            error: err.message
-        });
+  try {
+    const { quotationId } = req.params; // passed in URL
+ const userId = req.user;
+    // 1. Get quotation
+    const quotation = await Quotation.findById(quotationId).session(session);
+    if (!quotation) {
+      throw new Error('Quotation not found');
     }
+
+    // 2. Check if already converted
+    if (quotation.invoiceId) {
+      throw new Error('Quotation already converted to invoice');
+    }
+
+    // 3. Create invoice from quotation data
+    const invoice = new Invoice({
+      customerId: quotation.customerId || userId,
+      invoiceDate: new Date(),
+      dueDate: quotation.expiryDate,
+      referenceNo: quotation.referenceNo,
+      items: quotation.items,
+      status: 'UNPAID',
+      taxableAmount: quotation.taxableAmount,
+      TotalAmount: quotation.TotalAmount,
+      vat: quotation.vat,
+      totalDiscount: quotation.totalDiscount,
+      roundOff: quotation.roundOff,
+      bank: quotation.bank,
+      notes: quotation.notes,
+      termsAndCondition: quotation.termsAndCondition,
+      sign_type: quotation.sign_type,
+      signatureName: quotation.signatureName,
+      signatureImage: quotation.signatureImage,
+      billFrom: quotation.billFrom,
+      billTo: quotation.billTo,
+      userId: quotation.userId,
+      // store the quotation id in the invoice
+      quotationId: quotation._id
+    });
+
+    await invoice.save({ session });
+
+    // 4. Save invoiceId in quotation
+    quotation.invoiceId = invoice._id;
+    await quotation.save({ session });
+
+    // 5. Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      message: 'Quotation converted to invoice successfully',
+      data: invoice
+    });
+
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({
+      message: 'Error converting quotation to invoice',
+      error: err.message
+    });
+  }
 };
 
 
@@ -779,6 +742,6 @@ module.exports = {
   updateInvoice,
   getInvoice,
   getAllInvoices,
-  createInvoiceFromQuotation,
+  convertQuotationToInvoice,
   deleteInvoice
 };

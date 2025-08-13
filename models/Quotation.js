@@ -135,9 +135,10 @@ const quotationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'BankDetail',
   },
-  linkedInvoice: {
+  invoiceId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Invoice'
+    ref: 'Invoice',
+    default: null
   },
   convert_type: {
     type: String,
