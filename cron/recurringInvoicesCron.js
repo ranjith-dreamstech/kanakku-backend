@@ -1,7 +1,6 @@
 const cron = require('node-cron');
 const Invoice = require('@models/Invoice');
 
-// Run every day at midnight
 cron.schedule('0 0 * * *', async () => {
   console.log('Checking for recurring invoices...');
 
@@ -44,7 +43,6 @@ cron.schedule('0 0 * * *', async () => {
   }
 });
 
-// Helper: Calculate next recurring date
 function getNextRecurringDate(currentDate, recurring, duration) {
   const date = new Date(currentDate);
   switch (recurring) {
