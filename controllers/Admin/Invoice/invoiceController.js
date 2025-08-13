@@ -429,11 +429,9 @@ const getAllInvoices = async (req, res) => {
         const userId = req.user._id;
         const skip = (page - 1) * limit;
 
-        const query = { 
-            isDeleted: false 
-        };
+        const query = { isDeleted: false };
 
-        if (status && ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED', 'REFUNDED'].includes(status)) {
+        if (status && ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED', 'REFUNDED', 'PARTIALLY_PAID'].includes(status)) {
             query.status = status;
         }
 
@@ -447,15 +445,10 @@ const getAllInvoices = async (req, res) => {
 
         if (startDate || endDate) {
             query.invoiceDate = {};
-            if (startDate) {
-                query.invoiceDate.$gte = new Date(startDate);
-            }
-            if (endDate) {
-                query.invoiceDate.$lte = new Date(endDate);
-            }
+            if (startDate) query.invoiceDate.$gte = new Date(startDate);
+            if (endDate) query.invoiceDate.$lte = new Date(endDate);
         }
 
-        // Add search filter
         if (search) {
             const searchRegex = new RegExp(search, 'i');
             query.$or = [
@@ -467,13 +460,10 @@ const getAllInvoices = async (req, res) => {
             ];
         }
 
-        // Get total count
         const total = await Invoice.countDocuments(query);
 
-        // Get invoices with pagination and population
         const invoices = await Invoice.find(query)
             .populate('customerId', 'name email phone image')
-           
             .populate('billFrom', 'name email phone companyName')
             .populate('billTo', 'name email phone billingAddress image')
             .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode')
@@ -481,21 +471,41 @@ const getAllInvoices = async (req, res) => {
             .skip(skip)
             .limit(Number(limit));
 
-        // Get the next invoice ID
+        // Get payments grouped by invoice
+        const invoiceIds = invoices.map(inv => inv._id);
+        const payments = await InvoicePayment.aggregate([
+            { $match: { invoiceId: { $in: invoiceIds } } },
+            { 
+                $group: { 
+                    _id: "$invoiceId",
+                    totalPaid: { $sum: "$amount" },
+                    lastPaymentDate: { $max: "$received_on" }
+                }
+            }
+        ]);
+
+        // Map payments to invoice IDs for quick lookup
+        const paymentMap = {};
+        payments.forEach(p => {
+            paymentMap[p._id.toString()] = {
+                totalPaid: p.totalPaid,
+                lastPaymentDate: p.lastPaymentDate
+            };
+        });
+
         const lastInvoice = await Invoice.findOne()
             .sort({ invoiceNumber: -1 })
             .select('invoiceNumber');
         
-        let nextInvoiceNumber = 'INV-000001'; // Default if no invoices exist
+        let nextInvoiceNumber = 'INV-000001';
         if (lastInvoice && lastInvoice.invoiceNumber) {
             const lastNumber = parseInt(lastInvoice.invoiceNumber.split('-')[1]);
             nextInvoiceNumber = `INV-${String(lastNumber + 1).padStart(6, '0')}`;
         }
 
         const baseUrl = `${req.protocol}://${req.get('host')}/`;
-        
+
         const formattedInvoices = invoices.map((invoice) => {
-            // Format dates as "dd, MMM yyyy"
             const formatDate = (date) => {
                 if (!date) return null;
                 const d = new Date(date);
@@ -505,7 +515,6 @@ const getAllInvoices = async (req, res) => {
                 return `${day}, ${month} ${year}`;
             };
 
-            // Customer details with image
             const customerDetails = invoice.customerId ? {
                 id: invoice.customerId._id,
                 name: invoice.customerId.name || '',
@@ -516,7 +525,6 @@ const getAllInvoices = async (req, res) => {
                     : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
             } : null;
 
-            // BillFrom details (typically the seller/company)
             const billFromDetails = invoice.billFrom ? {
                 id: invoice.billFrom._id,
                 name: invoice.billFrom.name || '',
@@ -525,7 +533,6 @@ const getAllInvoices = async (req, res) => {
                 companyName: invoice.billFrom.companyName || null
             } : null;
 
-            // BillTo details (from Customer model)
             const billToDetails = invoice.billTo ? {
                 id: invoice.billTo._id,
                 name: invoice.billTo.name || '',
@@ -537,7 +544,6 @@ const getAllInvoices = async (req, res) => {
                       : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer' 
             } : null;
 
-            // Bank details
             const bankDetails = invoice.bank ? {
                 accountHoldername: invoice.bank.accountHoldername || '',
                 bankName: invoice.bank.bankName || '',
@@ -546,7 +552,6 @@ const getAllInvoices = async (req, res) => {
                 IFSCCode: invoice.bank.IFSCCode || ''
             } : null;
 
-            // Signature details
             const signatureImage = invoice.signatureImage 
                 ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
                 : null;
@@ -556,7 +561,6 @@ const getAllInvoices = async (req, res) => {
                 image: signatureImage
             } : null;
 
-            // Format items
             const formattedItems = invoice.items.map(item => ({
                 id: item._id,
                 productId: item.productId?._id || null,
@@ -578,6 +582,9 @@ const getAllInvoices = async (req, res) => {
                 discountType: item.discountType
             }));
 
+            // Payment info
+            const paymentInfo = paymentMap[invoice._id.toString()] || { totalPaid: 0, lastPaymentDate: null };
+
             return {
                 id: invoice._id,
                 invoiceNumber: invoice.invoiceNumber,
@@ -592,6 +599,9 @@ const getAllInvoices = async (req, res) => {
                 vat: invoice.vat,
                 TotalAmount: invoice.TotalAmount,
                 roundOff: invoice.roundOff,
+                totalPaid: paymentInfo.totalPaid,
+                remainingBalance: invoice.TotalAmount - paymentInfo.totalPaid,
+                lastPaymentDate: formatDate(paymentInfo.lastPaymentDate),
                 items: formattedItems,
                 itemsCount: invoice.items.length,
                 billFrom: billFromDetails,
@@ -633,6 +643,7 @@ const getAllInvoices = async (req, res) => {
         });
     }
 };
+
 
 const deleteInvoice = async (req, res) => {
   const session = await mongoose.startSession();
