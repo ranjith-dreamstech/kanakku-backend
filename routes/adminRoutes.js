@@ -199,6 +199,8 @@ router.get('/invoices', protect, invoiceController.getAllInvoices);
 router.get('/invoices/:id', protect, invoiceController.getInvoice);
 router.put('/invoices/:id', protect, upload.single('signatureImage'), invoiceController.updateInvoice);
 router.delete('/invoices/:id', protect, invoiceController.deleteInvoice);
+router.post('/quotation-convert-to-invoice/:quotationId', protect, upload.single('signatureImage'), invoiceController.createInvoice);
+
 //recurring invoice
 router.post('/recurring-invoices', protect, upload.single('signatureImage'), recurringInvoiceController.createRecurringInvoice);
 router.get('/recurring-invoices', protect, recurringInvoiceController.getAllRecurringInvoices);

@@ -123,6 +123,10 @@ const invoiceSchema = new mongoose.Schema({
     ref: 'Invoice',
     default: null
   },
+  sourceQuotation: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Quotation'
+  },
   nextRecurringDate: {
     type: Date,
     default: null

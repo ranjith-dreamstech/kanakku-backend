@@ -135,6 +135,10 @@ const quotationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'BankDetail',
   },
+  linkedInvoice: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Invoice'
+  },
   convert_type: {
     type: String,
     enum: ['quotation', 'invoice', 'purchase'],

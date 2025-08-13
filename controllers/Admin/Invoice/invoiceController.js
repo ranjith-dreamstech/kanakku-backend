@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 const Invoice = require('@models/Invoice');
+const Quotation = require('@models/Quotation');
+const User = require('@models/User');
+const Customer = require('@models/Customer');
 const { validationResult } = require('express-validator');
 
 const createInvoice = async (req, res) => {
@@ -120,6 +123,113 @@ const createInvoice = async (req, res) => {
     res.status(500).json({ message: 'Error creating invoice', error: err.message });
   }
 };
+
+const createInvoiceFromQuotation = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { quotationId } = req.params;
+        const userId = req.user;
+
+        // Validate requesting user exists
+        const user = await User.findById(userId).session(session);
+        if (!user) {
+            throw new Error('Invalid user ID');
+        }
+
+        // Find the quotation
+        const quotation = await Quotation.findById(quotationId).session(session);
+        if (!quotation) {
+            throw new Error('Quotation not found');
+        }
+
+        // Check if quotation is already converted to invoice
+        if (quotation.convert_type === 'invoice') {
+            throw new Error('This quotation has already been converted to an invoice');
+        }
+
+        // Validate bill from and bill to exist
+        const billFromUser = await User.findById(quotation.billFrom).session(session);
+        const billToCustomer = await Customer.findById(quotation.billTo).session(session);
+        
+        if (!billFromUser || !billToCustomer) {
+            throw new Error('Invalid bill from or bill to reference');
+        }
+
+        // Calculate due date (default to 30 days from now)
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 30);
+
+        // Create invoice from quotation data
+        const invoice = new Invoice({
+            customerId: quotation.customerId || quotation.billTo,
+            invoiceDate: new Date(),
+            dueDate: dueDate,
+            referenceNo: quotation.referenceNo,
+            items: quotation.items.map(item => ({
+                id: item.id,
+                name: item.name,
+                unit: item.unit,
+                qty: item.qty,
+                rate: item.rate,
+                discount: item.discount,
+                tax: item.tax,
+                tax_group_id: item.tax_group_id,
+                discount_type: item.discount_type,
+                discount_value: item.discount_value,
+                amount: item.amount
+            })),
+            status: 'UNPAID',
+            payment_method: 'CASH', // Default payment method
+            taxableAmount: quotation.taxableAmount,
+            TotalAmount: quotation.TotalAmount,
+            vat: quotation.vat,
+            totalDiscount: quotation.totalDiscount,
+            roundOff: quotation.roundOff,
+            bank: quotation.bank,
+            notes: quotation.notes,
+            termsAndCondition: quotation.termsAndCondition,
+            sign_type: quotation.sign_type,
+            signatureName: quotation.signatureName,
+            signatureImage: quotation.signatureImage,
+            billFrom: quotation.billFrom,
+            billTo: quotation.billTo,
+            userId: quotation.userId,
+            sourceQuotation: quotationId // Reference to the original quotation
+        });
+
+        // Save the invoice
+        await invoice.save({ session });
+
+        // Update the quotation to mark it as converted to invoice
+        quotation.convert_type = 'invoice';
+        quotation.linkedInvoice = invoice._id; // Reference to the new invoice
+        await quotation.save({ session });
+
+        // Commit transaction
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(201).json({
+            message: 'Invoice created from quotation successfully',
+            data: {
+                invoice,
+                quotation
+            }
+        });
+
+    } catch (err) {
+        // Rollback transaction
+        await session.abortTransaction();
+        session.endSession();
+        res.status(500).json({
+            message: 'Error creating invoice from quotation',
+            error: err.message
+        });
+    }
+};
+
 
 const updateInvoice = async (req, res) => {
   const session = await mongoose.startSession();
@@ -262,8 +372,8 @@ const getInvoice = async (req, res) => {
     try {
         const invoice = await Invoice.findById(req.params.id)
             .populate('customerId', 'name email phone image billingAddress')
-            .populate('billFrom', 'name email phone companyName address')
-            .populate('billTo', 'name email phone billingAddress')
+            .populate('billFrom', 'name email phone companyName address image')  // Added image
+            .populate('billTo', 'name email phone billingAddress image')       // Added image
             .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode');
 
         if (!invoice) {
@@ -297,6 +407,7 @@ const getInvoice = async (req, res) => {
             billingAddress: invoice.customerId.billingAddress || null
         } : null;
 
+
         const billFromDetails = invoice.billFrom ? {
             id: invoice.billFrom._id,
             name: invoice.billFrom.name || '',
@@ -306,12 +417,16 @@ const getInvoice = async (req, res) => {
             address: invoice.billFrom.address || null
         } : null;
 
+        // BillTo details with image
         const billToDetails = invoice.billTo ? {
             id: invoice.billTo._id,
             name: invoice.billTo.name || '',
             email: invoice.billTo.email || null,
             phone: invoice.billTo.phone || null,
-            billingAddress: invoice.billTo.billingAddress || null
+            billingAddress: invoice.billTo.billingAddress || null,
+            image: invoice.billTo.image 
+                ? `${baseUrl}${invoice.billTo.image.replace(/\\/g, '/')}`
+                : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
         } : null;
 
         // Bank details
@@ -376,6 +491,7 @@ const getInvoice = async (req, res) => {
             TotalAmount: invoice.TotalAmount,
             roundOff: invoice.roundOff,
             items: formattedItems,
+            itemsCount: invoice.items.length,  // Added itemsCount to match getAllInvoices
             billFrom: billFromDetails,
             billTo: billToDetails,
             bank: bankDetails,
@@ -405,7 +521,6 @@ const getInvoice = async (req, res) => {
         });
     }
 };
-
 const getAllInvoices = async (req, res) => {
     try {
         const { 
@@ -664,5 +779,6 @@ module.exports = {
   updateInvoice,
   getInvoice,
   getAllInvoices,
+  createInvoiceFromQuotation,
   deleteInvoice
 };
