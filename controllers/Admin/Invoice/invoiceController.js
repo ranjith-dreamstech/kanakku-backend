@@ -1,9 +1,8 @@
 const mongoose = require('mongoose');
 const Invoice = require('@models/Invoice');
 const Quotation = require('@models/Quotation');
-const User = require('@models/User');
-const Customer = require('@models/Customer');
 const { validationResult } = require('express-validator');
+const InvoicePayment = require('@models/InvoicePayment');
 
 const createInvoice = async (req, res) => {
   const session = await mongoose.startSession();
@@ -123,76 +122,6 @@ const createInvoice = async (req, res) => {
     res.status(500).json({ message: 'Error creating invoice', error: err.message });
   }
 };
-
-const convertQuotationToInvoice = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const { quotationId } = req.params; // passed in URL
- const userId = req.user;
-    // 1. Get quotation
-    const quotation = await Quotation.findById(quotationId).session(session);
-    if (!quotation) {
-      throw new Error('Quotation not found');
-    }
-
-    // 2. Check if already converted
-    if (quotation.invoiceId) {
-      throw new Error('Quotation already converted to invoice');
-    }
-
-    // 3. Create invoice from quotation data
-    const invoice = new Invoice({
-      customerId: quotation.customerId || userId,
-      invoiceDate: new Date(),
-      dueDate: quotation.expiryDate,
-      referenceNo: quotation.referenceNo,
-      items: quotation.items,
-      status: 'UNPAID',
-      taxableAmount: quotation.taxableAmount,
-      TotalAmount: quotation.TotalAmount,
-      vat: quotation.vat,
-      totalDiscount: quotation.totalDiscount,
-      roundOff: quotation.roundOff,
-      bank: quotation.bank,
-      notes: quotation.notes,
-      termsAndCondition: quotation.termsAndCondition,
-      sign_type: quotation.sign_type,
-      signatureName: quotation.signatureName,
-      signatureImage: quotation.signatureImage,
-      billFrom: quotation.billFrom,
-      billTo: quotation.billTo,
-      userId: quotation.userId,
-      // store the quotation id in the invoice
-      quotationId: quotation._id
-    });
-
-    await invoice.save({ session });
-
-    // 4. Save invoiceId in quotation
-    quotation.invoiceId = invoice._id;
-    await quotation.save({ session });
-
-    // 5. Commit transaction
-    await session.commitTransaction();
-    session.endSession();
-
-    res.status(201).json({
-      message: 'Quotation converted to invoice successfully',
-      data: invoice
-    });
-
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    res.status(500).json({
-      message: 'Error converting quotation to invoice',
-      error: err.message
-    });
-  }
-};
-
 
 const updateInvoice = async (req, res) => {
   const session = await mongoose.startSession();
@@ -737,11 +666,157 @@ const deleteInvoice = async (req, res) => {
   }
 };
 
+const convertQuotationToInvoice = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { quotationId } = req.params; // passed in URL
+ const userId = req.user;
+    // 1. Get quotation
+    const quotation = await Quotation.findById(quotationId).session(session);
+    if (!quotation) {
+      throw new Error('Quotation not found');
+    }
+
+    // 2. Check if already converted
+    if (quotation.invoiceId) {
+      throw new Error('Quotation already converted to invoice');
+    }
+
+    // 3. Create invoice from quotation data
+    const invoice = new Invoice({
+      customerId: quotation.customerId || userId,
+      invoiceDate: new Date(),
+      dueDate: quotation.expiryDate,
+      referenceNo: quotation.referenceNo,
+      items: quotation.items,
+      status: 'UNPAID',
+      taxableAmount: quotation.taxableAmount,
+      TotalAmount: quotation.TotalAmount,
+      vat: quotation.vat,
+      totalDiscount: quotation.totalDiscount,
+      roundOff: quotation.roundOff,
+      bank: quotation.bank,
+      notes: quotation.notes,
+      termsAndCondition: quotation.termsAndCondition,
+      sign_type: quotation.sign_type,
+      signatureName: quotation.signatureName,
+      signatureImage: quotation.signatureImage,
+      billFrom: quotation.billFrom,
+      billTo: quotation.billTo,
+      userId: quotation.userId,
+      // store the quotation id in the invoice
+      quotationId: quotation._id
+    });
+
+    await invoice.save({ session });
+
+    // 4. Save invoiceId in quotation
+    quotation.invoiceId = invoice._id;
+    await quotation.save({ session });
+
+    // 5. Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      message: 'Quotation converted to invoice successfully',
+      data: invoice
+    });
+
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({
+      message: 'Error converting quotation to invoice',
+      error: err.message
+    });
+  }
+};
+
+const recordInvoicePayment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { amount, payment_method, received_on, invoiceId, notes } = req.body;
+
+    if (!amount || amount <= 0) {
+      throw new Error('Invalid payment amount');
+    }
+
+    // Find the invoice
+    const invoice = await Invoice.findById(invoiceId).session(session);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+
+    if (invoice.status === 'PAID') {
+      throw new Error('Invoice is already fully paid');
+    }
+
+    // Calculate total paid so far
+    const totalPaidResult = await InvoicePayment.aggregate([
+      { $match: { invoiceId: new mongoose.Types.ObjectId(invoiceId) } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+
+    const alreadyPaid = totalPaidResult.length > 0 ? totalPaidResult[0].total : 0;
+    const remainingBalance = invoice.TotalAmount - alreadyPaid;
+
+    if (amount > remainingBalance) {
+      throw new Error(`Payment exceeds remaining balance. Remaining: ${remainingBalance}`);
+    }
+
+    // Create the payment record
+    const payment = new InvoicePayment({
+      invoiceId,
+      amount,
+      payment_method, // If ObjectId reference, make sure schema is updated
+      received_on: new Date(received_on),
+      notes: notes || '',
+      received_by: req.user
+    });
+
+    await payment.save({ session });
+
+    // Update invoice status
+    const newTotalPaid = alreadyPaid + amount;
+    if (newTotalPaid === invoice.TotalAmount) {
+      invoice.status = 'PAID';
+    } else if (newTotalPaid > 0) {
+      invoice.status = 'PARTIALLY_PAID';
+    }
+    await invoice.save({ session });
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      message: 'Payment recorded successfully',
+      data: payment,
+      invoice_status: invoice.status,
+      remaining_balance: invoice.TotalAmount - newTotalPaid
+    });
+
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({
+      message: 'Error recording payment',
+      error: err.message
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   updateInvoice,
   getInvoice,
   getAllInvoices,
   convertQuotationToInvoice,
+  recordInvoicePayment,
   deleteInvoice
 };
