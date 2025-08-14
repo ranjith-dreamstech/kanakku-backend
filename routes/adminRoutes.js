@@ -46,6 +46,7 @@ const invoiceTemplateController = require('@controllers/invoiceTemplateControlle
 const { createInvoiceValidator } = require('../validators/Admin/Invoice/invoiceValidator');
 const invoiceController = require('@controllers/Admin/Invoice/invoiceController');
 const emailSettingsController = require('@controllers/emailSettingsController');
+const emailTeamplateController = require('@controllers/emailTeamplateController');
 
 router.get('/', protect, adminController.dashboard);
 router.get('/countries', protect, adminController.getCountries);
@@ -202,7 +203,13 @@ router.post('/quotation-convert-to-invoice/:quotationId', protect, upload.single
 router.post('/invoice/payment', protect, invoiceController.recordInvoicePayment);
 
 //Email Settings
-router.post("/email-settings", emailSettingsController.createOrUpdateEmailSettings);
-router.get("/email-settings", emailSettingsController.getEmailSettings);
+router.post("/email-settings", protect, emailSettingsController.createOrUpdateEmailSettings);
+router.get("/email-settings", protect, emailSettingsController.getEmailSettings);
+
+//Email Template
+router.post("/email-template", protect, emailTeamplateController.createEmailTemplate);
+router.get("/email-template", protect, emailTeamplateController.listEmailTemplates);
+router.put("/email-template/:id", protect, emailTeamplateController.updateEmailTemplate);
+router.delete("/email-template/:id", protect, emailTeamplateController.deleteEmailTemplate);
 
 module.exports = router;
