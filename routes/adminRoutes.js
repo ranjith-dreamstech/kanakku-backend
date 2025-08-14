@@ -201,6 +201,7 @@ router.put('/invoices/:id', protect, upload.single('signatureImage'), invoiceCon
 router.delete('/invoices/:id', protect, invoiceController.deleteInvoice);
 router.post('/quotation-convert-to-invoice/:quotationId', protect, upload.single('signatureImage'), invoiceController.convertQuotationToInvoice);
 router.post('/invoice/payment', protect, invoiceController.recordInvoicePayment);
+router.get('/invoices-minimal', protect, invoiceController.listInvoicesMinimal);
 
 //Email Settings
 router.post("/email-settings", protect, emailSettingsController.createOrUpdateEmailSettings);

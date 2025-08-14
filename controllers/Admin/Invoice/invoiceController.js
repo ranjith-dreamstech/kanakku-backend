@@ -644,6 +644,94 @@ const getAllInvoices = async (req, res) => {
     }
 };
 
+const listInvoicesMinimal = async (req, res) => {
+    try {
+        const { search = '' } = req.query;
+        const userId = req.user;
+
+        // Build base query
+        const query = { 
+            isDeleted: false 
+            // Optionally add userId if invoices are user-specific
+            // userId
+        };
+
+        // Add search filter if search term exists
+        if (search) {
+            query.$or = [
+                { invoiceNumber: { $regex: search, $options: 'i' } },
+                { referenceNo: { $regex: search, $options: 'i' } },
+                { 'customerId.name': { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Get invoices (limit if no search)
+        const invoices = await Invoice.find(query)
+            .select('_id invoiceNumber referenceNo invoiceDate status TotalAmount customerId')
+            .populate('customerId', 'name') // Minimal customer info
+            .sort({ invoiceDate: -1 })
+            .limit(search ? 0 : 20);
+
+        // Get payment info for these invoices
+        const paymentDetails = await InvoicePayment.aggregate([
+            { $match: { invoiceId: { $in: invoices.map(i => i._id) } } },
+            { 
+                $group: { 
+                    _id: "$invoiceId",
+                    totalPaid: { $sum: "$amount" }
+                }
+            }
+        ]);
+
+        // Create a quick lookup map for payments
+        const paymentMap = paymentDetails.reduce((map, p) => {
+            map[p._id.toString()] = p.totalPaid;
+            return map;
+        }, {});
+
+        // Format response
+        const formattedInvoices = invoices.map(invoice => {
+            const totalPaid = paymentMap[invoice._id.toString()] || 0;
+            return {
+                id: invoice._id,
+                invoiceNumber: invoice.invoiceNumber,
+                referenceNo: invoice.referenceNo,
+                invoiceDate: invoice.invoiceDate,
+                status: invoice.status,
+                totalAmount: invoice.TotalAmount,
+                customer: invoice.customerId ? {
+                    id: invoice.customerId._id,
+                    name: invoice.customerId.name
+                } : null,
+                payment: {
+                    totalPaid,
+                    remaining: invoice.TotalAmount - totalPaid
+                }
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            message: search 
+                ? 'Search results for invoices retrieved successfully'
+                : 'Last 20 invoices retrieved successfully',
+            data: formattedInvoices,
+            meta: {
+                count: invoices.length,
+                isSearchResult: !!search
+            }
+        });
+
+    } catch (err) {
+        console.error('List minimal invoices error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching invoices',
+            error: err.message
+        });
+    }
+};
+
 
 const deleteInvoice = async (req, res) => {
   const session = await mongoose.startSession();
@@ -827,6 +915,7 @@ module.exports = {
   updateInvoice,
   getInvoice,
   getAllInvoices,
+  listInvoicesMinimal,
   convertQuotationToInvoice,
   recordInvoicePayment,
   deleteInvoice

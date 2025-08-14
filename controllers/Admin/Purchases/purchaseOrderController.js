@@ -903,9 +903,12 @@ const getPurchaseOrderById = async (req, res) => {
 };
 
 const updatePurchaseOrder = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { id } = req.params;
-        const { 
+        const {
             vendorId,
             orderDate,
             dueDate,
@@ -925,61 +928,76 @@ const updatePurchaseOrder = async (req, res) => {
         } = req.body;
 
         // Validate purchase order exists
-        const existingOrder = await PurchaseOrder.findById(id);
+        const existingOrder = await PurchaseOrder.findById(id).session(session);
         if (!existingOrder) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(404).json({ message: 'Purchase order not found' });
         }
 
         // Validate requesting user exists
-        const user = await User.findById(userId);
+        const user = await User.findById(userId).session(session);
         if (!user) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(422).json({ message: 'Invalid user ID' });
         }
 
-        // Get bill from and bill to user addresses if provided
+        // Validate billFrom / billTo users
         if (billFrom || billTo) {
-            const billFromUser = billFrom ? await User.findById(billFrom) : null;
-            const billToUser = billTo ? await User.findById(billTo) : null;
-            
+            const billFromUser = billFrom ? await User.findById(billFrom).session(session) : null;
+            const billToUser = billTo ? await User.findById(billTo).session(session) : null;
+
             if ((billFrom && !billFromUser) || (billTo && !billToUser)) {
+                await session.abortTransaction();
+                session.endSession();
                 return res.status(422).json({ message: 'Invalid bill from or bill to user ID' });
             }
 
-            // Validate at least one address exists if updating both
             if (billFrom && billTo && !billFromUser.address && !billToUser.address) {
+                await session.abortTransaction();
+                session.endSession();
                 return res.status(400).json({ message: 'Both bill from and bill to addresses are missing' });
             }
         }
 
-        // Validate products in items if provided
+        // Validate products
         if (items && Array.isArray(items)) {
             for (const item of items) {
-                const product = await Product.findById(item.id);
+                const product = await Product.findById(item.id).session(session);
                 if (!product) {
+                    await session.abortTransaction();
+                    session.endSession();
                     return res.status(422).json({ message: `Invalid product ID: ${item.id}` });
                 }
             }
         }
 
-        // Validate signature type if provided
+        // Validate signature type
         if (sign_type) {
             const validSignatureTypes = ['none', 'digitalSignature', 'eSignature'];
             if (!validSignatureTypes.includes(sign_type)) {
+                await session.abortTransaction();
+                session.endSession();
                 return res.status(400).json({ message: 'Invalid signature type' });
             }
         }
 
-        // Validate signature data if eSignature is selected
+        // eSignature checks
         if (sign_type === 'eSignature') {
             if (!req.file && !existingOrder.signatureImage) {
+                await session.abortTransaction();
+                session.endSession();
                 return res.status(400).json({ message: 'Signature image is required for eSignature' });
             }
             if (!signatureName && !existingOrder.signatureName) {
+                await session.abortTransaction();
+                session.endSession();
                 return res.status(400).json({ message: 'Signature name is required for eSignature' });
             }
         }
 
-        // Calculate amounts if items are updated
+        // Calculate amounts if items updated
         let taxableAmount = existingOrder.taxableAmount;
         let totalDiscount = existingOrder.totalDiscount;
         let vat = existingOrder.vat;
@@ -995,7 +1013,7 @@ const updatePurchaseOrder = async (req, res) => {
                 const itemAmount = item.amount || (item.qty * (item.rate || 0));
                 const itemDiscount = item.discount || 0;
                 const itemTax = item.tax || 0;
-                
+
                 taxableAmount += itemAmount;
                 totalDiscount += itemDiscount;
                 vat += itemTax;
@@ -1003,7 +1021,7 @@ const updatePurchaseOrder = async (req, res) => {
             });
         }
 
-        // Prepare update object
+        // Prepare update data
         const updateData = {
             vendorId: vendorId || existingOrder.vendorId,
             purchaseOrderDate: orderDate ? new Date(orderDate) : existingOrder.purchaseOrderDate,
@@ -1041,17 +1059,19 @@ const updatePurchaseOrder = async (req, res) => {
             convert_type: convert_type || existingOrder.convert_type
         };
 
-        // If changing to none, clear all signature fields
         if (sign_type === 'none') {
             updateData.signatureName = null;
             updateData.signatureImage = null;
             updateData.signatureId = null;
         }
 
-        const updatedOrder = await PurchaseOrder.findByIdAndUpdate(id, updateData, { new: true });
+        const updatedOrder = await PurchaseOrder.findByIdAndUpdate(id, updateData, { new: true, session });
 
-        res.status(200).json({ 
-            message: 'Purchase order updated successfully', 
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).json({
+            message: 'Purchase order updated successfully',
             data: {
                 purchaseOrder: {
                     id: updatedOrder._id,
@@ -1080,9 +1100,13 @@ const updatePurchaseOrder = async (req, res) => {
                 }
             }
         });
+
     } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+
         console.error(err);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Error updating purchase order',
             error: err.message
         });

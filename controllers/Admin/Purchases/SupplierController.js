@@ -5,12 +5,15 @@ const path = require('path');
 
 //create
 const createSupplier = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { 
             supplier_name, 
             supplier_email, 
             supplier_phone, 
-            balance = 0, // Default to 0 if not provided
+            balance = 0,
             balance_type,
             firstName,
             lastName,
@@ -24,24 +27,22 @@ const createSupplier = async (req, res) => {
             postalCode
         } = req.body;
 
-        // Get the uploaded file path
         const profileImage = req.file ? req.file.path : undefined;
 
-        // Split supplier name if firstName/lastName not provided
         const nameParts = supplier_name.split(' ');
         const defaultFirstName = nameParts[0] || '';
         const defaultLastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
 
-        // Create User for supplier
+        // Create supplier user
         const user = new User({
             firstName: firstName || defaultFirstName,
             lastName: lastName || defaultLastName,
             email: supplier_email,
             phone: supplier_phone,
             password: password || 'defaultPassword123',
-            user_type: 2, // 2 for supplier
+            user_type: 2, // Supplier
             balance: Number(balance),
-            balance_type: balance == 0 ? null : (balance_type || 'credit'), // Null if balance is 0
+            balance_type: balance == 0 ? null : (balance_type || 'credit'),
             gender,
             dateOfBirth,
             address,
@@ -52,8 +53,12 @@ const createSupplier = async (req, res) => {
             profileImage
         });
 
-        await user.save();
-        
+        await user.save({ session });
+
+        // ✅ Commit the transaction
+        await session.commitTransaction();
+        session.endSession();
+
         res.status(201).json({ 
             success: true,
             message: 'Supplier created successfully', 
@@ -64,13 +69,15 @@ const createSupplier = async (req, res) => {
                 supplier_phone: user.phone,
                 balance: user.balance,
                 balance_type: user.balance_type,
-                profileImage: user.profileImage ? 
-                    `${req.protocol}://${req.get('host')}/${user.profileImage.replace(/\\/g, '/')}` : 
-                    null
+                profileImage: user.profileImage 
+                    ? `${req.protocol}://${req.get('host')}/${user.profileImage.replace(/\\/g, '/')}` 
+                    : null
             }
         });
     } catch (err) {
-        // Clean up uploaded file if error occurs
+        await session.abortTransaction();
+        session.endSession();
+
         if (req.file && req.file.path) {
             try {
                 fs.unlinkSync(req.file.path);
@@ -78,9 +85,10 @@ const createSupplier = async (req, res) => {
                 console.error('Error cleaning up profile image:', fileErr);
             }
         }
-        
+
         console.error('Supplier creation error:', err);
         res.status(500).json({ 
+            success: false,
             message: 'Error creating supplier user',
             error: err.message 
         });
@@ -155,20 +163,23 @@ const listSuppliers = async (req, res) => {
 }
 // Update supplier
 const updateSupplier = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { id } = req.params;
         let updates = req.body;
-        
-        // First get the existing user to handle image cleanup
-        const existingUser = await User.findOne({ _id: id, user_type: 2 });
-        
+
+        // Get existing supplier inside transaction
+        const existingUser = await User.findOne({ _id: id, user_type: 2 }).session(session);
+
         if (!existingUser) {
-            return res.status(404).json({
-                message: "Supplier not found"
-            });
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({ message: "Supplier not found" });
         }
 
-        // Handle profile image removal if requested
+        // Handle profile image removal
         if (updates.profile_image_removed === "true") {
             try {
                 if (existingUser.profileImage) {
@@ -177,17 +188,15 @@ const updateSupplier = async (req, res) => {
                         fs.unlinkSync(fullPath);
                     }
                 }
-                updates.profileImage = null; // Set profileImage to null
+                updates.profileImage = null;
             } catch (err) {
                 console.error('Error removing profile image:', err);
-                // Continue even if deletion fails
             }
-            delete updates.profile_image_removed; // Remove this field from updates
+            delete updates.profile_image_removed;
         }
 
-        // Handle file upload if exists
+        // Handle new profile image upload
         if (req.file) {
-            // Delete old image if it exists
             if (existingUser.profileImage) {
                 try {
                     const fullPath = path.join(process.cwd(), existingUser.profileImage);
@@ -196,13 +205,12 @@ const updateSupplier = async (req, res) => {
                     }
                 } catch (err) {
                     console.error('Error deleting old profile image:', err);
-                    // Continue even if deletion fails
                 }
             }
             updates.profileImage = req.file.path;
         }
 
-        // Prevent changing critical fields
+        // Prevent critical field updates
         const restrictedFields = ['user_type', 'email', '_id', 'password'];
         restrictedFields.forEach(field => {
             if (updates[field]) {
@@ -210,7 +218,7 @@ const updateSupplier = async (req, res) => {
             }
         });
 
-        // Transform supplier_name to firstName and lastName if provided
+        // Handle supplier_name split
         if (updates.supplier_name) {
             const names = updates.supplier_name.split(' ');
             updates.firstName = names[0] || existingUser.firstName;
@@ -218,42 +226,45 @@ const updateSupplier = async (req, res) => {
             delete updates.supplier_name;
         }
 
-        // Update the user
+        // Update supplier inside transaction
         const updatedUser = await User.findOneAndUpdate(
             { _id: id, user_type: 2 },
             updates,
-            { new: true, runValidators: true }
+            { new: true, runValidators: true, session }
         ).select('-password -__v');
 
         if (!updatedUser) {
-            // Remove uploaded file if update failed
             if (req.file && fs.existsSync(req.file.path)) {
                 fs.unlinkSync(req.file.path);
             }
-            return res.status(404).json({
-                message: "Supplier not found or update failed"
-            });
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({ message: "Supplier not found or update failed" });
         }
 
-        // Format the response
-        const responseData = {
-            id: updatedUser._id,
-            supplier_name: `${updatedUser.firstName} ${updatedUser.lastName}`,
-            supplier_email: updatedUser.email,
-            supplier_phone: updatedUser.phone,
-            balance: updatedUser.balance,
-            balance_type: updatedUser.balance_type,
-            profileImage: updatedUser.profileImage ? 
-                `${req.protocol}://${req.get('host')}/${updatedUser.profileImage.replace(/\\/g, '/')}` : 
-                null
-        };
+        // Commit transaction
+        await session.commitTransaction();
+        session.endSession();
 
         res.status(200).json({
             message: 'Supplier updated successfully',
-            data: responseData
+            data: {
+                id: updatedUser._id,
+                supplier_name: `${updatedUser.firstName} ${updatedUser.lastName}`,
+                supplier_email: updatedUser.email,
+                supplier_phone: updatedUser.phone,
+                balance: updatedUser.balance,
+                balance_type: updatedUser.balance_type,
+                profileImage: updatedUser.profileImage
+                    ? `${req.protocol}://${req.get('host')}/${updatedUser.profileImage.replace(/\\/g, '/')}`
+                    : null
+            }
         });
+
     } catch (err) {
-        // Remove uploaded file if error occurs
+        await session.abortTransaction();
+        session.endSession();
+
         if (req.file && fs.existsSync(req.file.path)) {
             try {
                 fs.unlinkSync(req.file.path);
@@ -261,9 +272,9 @@ const updateSupplier = async (req, res) => {
                 console.error('Error cleaning up uploaded file:', fileErr);
             }
         }
-        
+
         console.error('Supplier update error:', err);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Error updating supplier',
             error: process.env.NODE_ENV === 'development' ? err.message : undefined
         });

@@ -263,98 +263,110 @@ const listSupplierPayments = async (req, res) => {
 };
 
 const updateSupplierPayment = async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(422).json({
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    const { id } = req.params;
-    const userId = req.user;
-    const {
-      purchaseId,
-      supplierId,
-      referenceNumber,
-      paymentDate,
-      paymentMode,
-      amount,
-      paidAmount,
-      dueAmount,
-      notes,
-    } = req.body;
-
-    // Check if payment exists
-    const existingPayment = await SupplierPayment.findById(id);
-    if (!existingPayment) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Supplier payment not found' 
-      });
-    }
-
-    // Handle new file if uploaded - include 'uploads/' prefix
-    let attachment = existingPayment.attachment;
-    if (req.file) {
-      attachment = `uploads/${req.file.filename}`;
-    }
-
-    const updatedPayment = await SupplierPayment.findByIdAndUpdate(
-      id,
-      {
-        purchaseId,
-        supplierId,
-        referenceNumber,
-        paymentDate,
-        paymentMode,
-        amount,
-        paidAmount,
-        dueAmount,
-        notes,
-        attachment,
-        updatedBy: userId
-      },
-      { new: true }
-    );
-
-    // Update purchase status if payment amounts changed
-    if (existingPayment.paidAmount !== paidAmount || existingPayment.dueAmount !== dueAmount) {
-      let purchaseStatus = 'partially_paid';
-      if (dueAmount === 0) {
-        purchaseStatus = 'paid';
-      }
-
-      await Purchase.findByIdAndUpdate(
-        purchaseId,
-        {
-          $set: {
-            status: purchaseStatus,
-          }
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(422).json({
+                message: 'Validation failed',
+                errors: errors.array()
+            });
         }
-      );
+
+        const { id } = req.params;
+        const userId = req.user;
+        const {
+            purchaseId,
+            supplierId,
+            referenceNumber,
+            paymentDate,
+            paymentMode,
+            amount,
+            paidAmount,
+            dueAmount,
+            notes
+        } = req.body;
+
+        // Find payment in transaction
+        const existingPayment = await SupplierPayment.findById(id).session(session);
+        if (!existingPayment) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({
+                success: false,
+                message: 'Supplier payment not found'
+            });
+        }
+
+        // Handle new file if uploaded
+        let attachment = existingPayment.attachment;
+        if (req.file) {
+            attachment = `uploads/${req.file.filename}`;
+        }
+
+        // Update payment
+        const updatedPayment = await SupplierPayment.findByIdAndUpdate(
+            id,
+            {
+                purchaseId,
+                supplierId,
+                referenceNumber,
+                paymentDate,
+                paymentMode,
+                amount,
+                paidAmount,
+                dueAmount,
+                notes,
+                attachment,
+                updatedBy: userId
+            },
+            { new: true, session }
+        );
+
+        // Update purchase status if payment amounts changed
+        if (existingPayment.paidAmount !== paidAmount || existingPayment.dueAmount !== dueAmount) {
+            let purchaseStatus = 'partially_paid';
+            if (Number(dueAmount) === 0) {
+                purchaseStatus = 'paid';
+            }
+
+            await Purchase.findByIdAndUpdate(
+                purchaseId,
+                { $set: { status: purchaseStatus } },
+                { session }
+            );
+        }
+
+        // Commit transaction
+        await session.commitTransaction();
+        session.endSession();
+
+        res.status(200).json({
+            success: true,
+            message: 'Supplier payment updated successfully',
+            data: {
+                payment: updatedPayment,
+                ...(existingPayment.purchaseId.toString() === purchaseId && {
+                    updatedPurchaseStatus: Number(dueAmount) === 0 ? 'paid' : 'partially_paid'
+                })
+            }
+        });
+
+    } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+
+        console.error('Error updating supplier payment:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error updating supplier payment',
+            error: err.message
+        });
     }
-
-    res.status(200).json({
-      success: true,
-      message: 'Supplier payment updated successfully',
-      data: {
-        payment: updatedPayment,
-        ...(existingPayment.purchaseId === purchaseId && {
-          updatedPurchaseStatus: dueAmount === 0 ? 'paid' : 'partially_paid'
-        })
-      }
-    });
-
-  } catch (err) {
-    console.error('Error updating supplier payment:', err);
-    res.status(500).json({
-      success: false,
-      message: 'Error updating supplier payment',
-      error: err.message
-    });
-  }
 };
 
 const deleteSupplierPayment = async (req, res) => {

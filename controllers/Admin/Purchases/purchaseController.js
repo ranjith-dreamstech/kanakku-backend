@@ -892,6 +892,9 @@ const getPurchaseById = async (req, res) => {
 
 // Update purchase status
 const updatePurchaseStatus = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { 
             status, 
@@ -906,43 +909,34 @@ const updatePurchaseStatus = async (req, res) => {
         const { id } = req.params;
         const userId = req.user._id; // Assuming user is authenticated
 
-        // Validate status
         const validStatuses = ['pending', 'completed', 'cancelled', 'partially_paid', 'paid'];
         if (!validStatuses.includes(status)) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(400).json({ 
                 success: false,
                 message: 'Invalid status value' 
             });
         }
 
-        // Find the purchase
         let purchase = await Purchase.findById(id)
             .populate('vendorId', 'firstName lastName email phone')
             .populate('userId', 'firstName lastName email')
             .populate('billFrom', 'firstName lastName email profileImage phone')
             .populate('billTo', 'firstName lastName email profileImage phone')
-            .populate({
-                path: 'items.id',
-                model: 'Product',
-                select: 'name sku description'
-            })
-            .populate({
-                path: 'bank',
-                model: 'BankDetail',
-                select: 'bankName accountNumber accountHoldername IFSCCode'
-            });
+            .populate({ path: 'items.id', model: 'Product', select: 'name sku description' })
+            .populate({ path: 'bank', model: 'BankDetail', select: 'bankName accountNumber accountHoldername IFSCCode' })
+            .session(session);
 
         if (!purchase) {
-            return res.status(404).json({ 
-                success: false,
-                message: 'Purchase not found' 
-            });
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({ success: false, message: 'Purchase not found' });
         }
 
-        // Determine payment amounts based on status change
         let paidAmount = purchase.paidAmount;
         let balanceAmount = purchase.balanceAmount;
-        
+
         if (status === 'paid' || status === 'partially_paid') {
             if (sp_amount && sp_paid_amount) {
                 if (sp_paid_amount === sp_amount) {
@@ -953,38 +947,31 @@ const updatePurchaseStatus = async (req, res) => {
                     balanceAmount = sp_amount - sp_paid_amount;
                 }
             } else if (status === 'paid') {
-                // If changing to paid without specific amounts, pay the full balance
                 paidAmount = purchase.totalAmount;
                 balanceAmount = 0;
             }
         }
 
-        // Update purchase
         purchase.status = status;
         purchase.paidAmount = paidAmount;
         purchase.balanceAmount = balanceAmount;
-        
-        await purchase.save();
+        await purchase.save({ session });
 
-        // Update purchase order status if purchaseOrderId exists
         if (purchase.purchaseOrderId) {
             await PurchaseOrder.findOneAndUpdate(
                 { purchaseOrderId: purchase.purchaseOrderId },
                 { 
                     status: status === 'paid' ? 'completed' : 
-                           status === 'cancelled' ? 'cancelled' : 
-                           'pending' 
-                }
+                           status === 'cancelled' ? 'cancelled' : 'pending' 
+                },
+                { session }
             );
         }
 
-        // Create or update supplier payment if status is paid or partially_paid
         if (status === 'paid' || status === 'partially_paid') {
-            // Check if supplier payment already exists
-            let supplierPayment = await SupplierPayment.findOne({ purchaseId: purchase._id });
+            let supplierPayment = await SupplierPayment.findOne({ purchaseId: purchase._id }).session(session);
 
             if (supplierPayment) {
-                // Update existing payment
                 supplierPayment.referenceNumber = sp_referenceNumber || supplierPayment.referenceNumber;
                 supplierPayment.paymentDate = sp_paymentDate || supplierPayment.paymentDate;
                 supplierPayment.paymentMode = sp_paymentMode || supplierPayment.paymentMode;
@@ -992,9 +979,8 @@ const updatePurchaseStatus = async (req, res) => {
                 supplierPayment.paidAmount = sp_paid_amount || paidAmount;
                 supplierPayment.dueAmount = balanceAmount;
                 supplierPayment.notes = sp_notes || supplierPayment.notes;
-                await supplierPayment.save();
+                await supplierPayment.save({ session });
             } else {
-                // Create new payment
                 supplierPayment = new SupplierPayment({
                     purchaseId: purchase._id,
                     supplierId: purchase.billTo,
@@ -1007,17 +993,16 @@ const updatePurchaseStatus = async (req, res) => {
                     notes: sp_notes || '',
                     createdBy: userId
                 });
-                await supplierPayment.save();
+                await supplierPayment.save({ session });
             }
         }
 
-        // Update inventory for each product ONLY if status is changed to 'paid'
-        if (status === 'paid' && purchase.status !== 'paid') {
+        if (status === 'paid') {
             for (const item of purchase.items) {
                 let inventory = await Inventory.findOne({ 
                     productId: item.id, 
                     userId: purchase.userId 
-                });
+                }).session(session);
 
                 if (!inventory) {
                     inventory = new Inventory({
@@ -1027,10 +1012,8 @@ const updatePurchaseStatus = async (req, res) => {
                     });
                 }
 
-                // Update quantity
                 inventory.quantity += item.qty || 0;
 
-                // Add to inventory history
                 inventory.inventory_history.push({
                     unitId: item.unit,
                     quantity: inventory.quantity,
@@ -1042,11 +1025,13 @@ const updatePurchaseStatus = async (req, res) => {
                     createdBy: userId
                 });
 
-                await inventory.save();
+                await inventory.save({ session });
             }
         }
 
-        // Format dates as "dd, MMM yyyy"
+        await session.commitTransaction();
+        session.endSession();
+
         const formatDate = (date) => {
             if (!date) return null;
             const d = new Date(date);
@@ -1056,7 +1041,6 @@ const updatePurchaseStatus = async (req, res) => {
             return `${day}, ${month} ${year}`;
         };
 
-        // Prepare response data
         const responseData = {
             id: purchase._id,
             purchaseId: purchase.purchaseId,
@@ -1105,6 +1089,8 @@ const updatePurchaseStatus = async (req, res) => {
         });
 
     } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
         console.error('Update purchase status error:', err);
         res.status(500).json({
             success: false,

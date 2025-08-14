@@ -59,14 +59,51 @@ const createEmailTemplate = async (req, res) => {
 // List all Email Templates
 const listEmailTemplates = async (req, res) => {
     try {
-        const templates = await EmailTemplate.find()
+        const { 
+            page = 1, 
+            limit = 10, 
+            search = '', 
+            status 
+        } = req.query;
+
+        // Build query object
+        const query = {};
+
+        // Add search filter (title or subject)
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { subject: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Add status filter if provided
+        if (status) {
+            query.status = status;
+        }
+
+        // Get total count for pagination
+        const total = await EmailTemplate.countDocuments(query);
+
+        // Get paginated results
+        const templates = await EmailTemplate.find(query)
             .populate('notification_type', 'title slug')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(Number(limit));
 
         res.status(200).json({
             success: true,
             message: 'Email templates fetched successfully',
-            data: templates
+            data: {
+                templates,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
+            }
         });
     } catch (err) {
         console.error('Error fetching email templates:', err);
