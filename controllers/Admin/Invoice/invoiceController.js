@@ -365,7 +365,7 @@ const getInvoice = async (req, res) => {
             };
         } else if (invoice.sign_type === 'digitalSignature' && invoice.signatureId) {
             signatureDetails = {
-                id : invoice.signatureId || null,
+                id : invoice.signatureId.id || null,
                 name: invoice.signatureId.signatureName || null,
                 image: invoice.signatureId.signatureImage
                     ? `${baseUrl}${invoice.signatureId.signatureImage.replace(/\\/g, '/')}`
