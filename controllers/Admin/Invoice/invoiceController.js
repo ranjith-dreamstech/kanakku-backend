@@ -67,7 +67,7 @@ const createInvoice = async (req, res) => {
       dueDate: new Date(dueDate),
       referenceNo: referenceNo || '',
       items: items.map(item => ({
-        id: item.productId,
+        id: item.id,
         name: item.name,
         key: item.key,
         qty: item.qty,
@@ -218,7 +218,7 @@ const updateInvoice = async (req, res) => {
       dueDate: new Date(dueDate),
       referenceNo: referenceNo || '',
       items: items.map(item => ({
-        id: item.productId,
+        id: item.id,
         name: item.name,
         key: item.key,
         qty: item.qty,
