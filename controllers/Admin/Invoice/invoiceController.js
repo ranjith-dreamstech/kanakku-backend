@@ -372,8 +372,8 @@ const getInvoice = async (req, res) => {
             id: invoice._id,
             invoiceNumber: invoice.invoiceNumber,
             customer: customerDetails,
-            invoiceDate: formatDate(invoice.invoiceDate),
-            dueDate: formatDate(invoice.dueDate),
+            invoiceDate: invoice.invoiceDate,
+            dueDate: invoice.dueDate,
             referenceNo: invoice.referenceNo,
             status: invoice.status,
             payment_method: invoice.payment_method,
@@ -394,8 +394,8 @@ const getInvoice = async (req, res) => {
             recurringDuration: invoice.isRecurring ? invoice.recurringDuration : null,
             sign_type: invoice.sign_type,
             signature: signatureDetails,
-            createdAt: formatDate(invoice.createdAt),
-            updatedAt: formatDate(invoice.updatedAt)
+            createdAt: invoice.createdAt,
+            updatedAt: invoice.updatedAt
         };
 
         res.status(200).json({
