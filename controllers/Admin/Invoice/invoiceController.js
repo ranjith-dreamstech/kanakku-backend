@@ -384,7 +384,7 @@ const getInvoice = async (req, res) => {
             TotalAmount: invoice.TotalAmount,
             roundOff: invoice.roundOff,
             items: formattedItems,
-            itemsCount: invoice.items.length,  // Added itemsCount to match getAllInvoices
+            itemsCount: invoice.items.length,
             billFrom: billFromDetails,
             billTo: billToDetails,
             bank: bankDetails,
