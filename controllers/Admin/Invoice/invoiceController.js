@@ -185,23 +185,18 @@ const updateInvoice = async (req, res) => {
       dueDate: new Date(dueDate),
       referenceNo: referenceNo || '',
       items: items.map(item => ({
-        productId: item.productId,
+        id: item.productId,
         name: item.name,
         key: item.key,
-        quantity: item.quantity,
-        units: item.units,
+        qty: item.qty,
         unit: item.unit,
         rate: item.rate,
         discount: item.discount,
         tax: item.tax,
-        taxInfo: item.taxInfo,
+        tax_group_id: item.tax_group_id,
         amount: item.amount || (item.rate * item.quantity),
-        discountType: item.discountType,
-        isRateFormUpdated: item.isRateFormUpdated,
-        form_updated_discounttype: item.form_updated_discounttype,
-        form_updated_discount: item.form_updated_discount,
-        form_updated_rate: item.form_updated_rate,
-        form_updated_tax: item.form_updated_tax
+        discount_type: item.discount_type,
+        discount_value: item.discount_value,     
       })),
       status: status || 'UNPAID',
       payment_method: payment_method || 'CASH',
@@ -259,28 +254,22 @@ const getInvoice = async (req, res) => {
     try {
         const invoice = await Invoice.findById(req.params.id)
             .populate('customerId', 'name email phone image billingAddress')
-            .populate('billFrom', 'name email phone companyName address image')
+            .populate({
+                path: 'billFrom',
+                model: 'User',
+                select: 'firstName lastName email phone profileImage address'
+            })
             .populate('billTo', 'name email phone billingAddress image')
             .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode');
 
         if (!invoice) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 success: false,
-                message: 'Invoice not found' 
+                message: 'Invoice not found'
             });
         }
 
         const baseUrl = `${req.protocol}://${req.get('host')}/`;
-
-        // Format dates as "dd, MMM yyyy"
-        const formatDate = (date) => {
-            if (!date) return null;
-            const d = new Date(date);
-            const day = d.getDate().toString().padStart(2, '0');
-            const month = d.toLocaleString('default', { month: 'short' });
-            const year = d.getFullYear();
-            return `${day}, ${month} ${year}`;
-        };
 
         // Customer details
         const customerDetails = invoice.customerId ? {
@@ -288,32 +277,37 @@ const getInvoice = async (req, res) => {
             name: invoice.customerId.name || '',
             email: invoice.customerId.email || null,
             phone: invoice.customerId.phone || null,
-            image: invoice.customerId.image 
+            image: invoice.customerId.image
                 ? `${baseUrl}${invoice.customerId.image.replace(/\\/g, '/')}`
                 : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer',
             billingAddress: invoice.customerId.billingAddress || null
         } : null;
 
+        // BillFrom details (from User model)
         const billFromDetails = invoice.billFrom ? {
             id: invoice.billFrom._id,
-            name: invoice.billFrom.name || '',
+            name: `${invoice.billFrom.firstName || ''} ${invoice.billFrom.lastName || ''}`.trim(),
             email: invoice.billFrom.email || null,
             phone: invoice.billFrom.phone || null,
-            companyName: invoice.billFrom.companyName || null,
-            address: invoice.billFrom.address || null
+            address: invoice.billFrom.address || null,
+            image: invoice.billFrom.profileImage
+                ? `${baseUrl}${invoice.billFrom.profileImage.replace(/\\/g, '/')}`
+                : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=User'
         } : null;
 
+        // BillTo details
         const billToDetails = invoice.billTo ? {
             id: invoice.billTo._id,
             name: invoice.billTo.name || '',
             email: invoice.billTo.email || null,
             phone: invoice.billTo.phone || null,
             billingAddress: invoice.billTo.billingAddress || null,
-            image: invoice.billTo.image 
+            image: invoice.billTo.image
                 ? `${baseUrl}${invoice.billTo.image.replace(/\\/g, '/')}`
                 : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
         } : null;
 
+        // Bank details
         const bankDetails = invoice.bank ? {
             id: invoice.bank.id || '',
             accountHoldername: invoice.bank.accountHoldername || '',
@@ -323,7 +317,8 @@ const getInvoice = async (req, res) => {
             IFSCCode: invoice.bank.IFSCCode || ''
         } : null;
 
-        const signatureImage = invoice.signatureImage 
+        // Signature details
+        const signatureImage = invoice.signatureImage
             ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
             : null;
 
@@ -332,6 +327,7 @@ const getInvoice = async (req, res) => {
             image: signatureImage
         } : null;
 
+        // Response object
         const responseData = {
             id: invoice._id,
             invoiceNumber: invoice.invoiceNumber,
@@ -346,9 +342,9 @@ const getInvoice = async (req, res) => {
             vat: invoice.vat,
             TotalAmount: invoice.TotalAmount,
             roundOff: invoice.roundOff,
-            items: invoice.items,  // Use raw items
+            items: invoice.items, // keep raw items
             itemsCount: invoice.items.length,
-            billFrom: billFromDetails,
+            billFrom: billFromDetails, // From User model
             billTo: billToDetails,
             bank: bankDetails,
             notes: invoice.notes,
