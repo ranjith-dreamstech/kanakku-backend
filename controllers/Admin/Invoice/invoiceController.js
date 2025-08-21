@@ -35,31 +35,31 @@ const createInvoice = async (req, res) => {
       recurring,
       sign_type,
       signatureName,
+      signatureId,  // <-- Added for digitalSignature
       billFrom,
-      billTo,
-      
+      billTo
     } = req.body;
 
     const customerId = req.user;
     const userId = req.user;
 
-    let calculatedTaxableAmount = taxableAmount || 0;
-    let calculatedVat = vat || 0;
-    let calculatedTotalDiscount = totalDiscount || 0;
-    let calculatedTotalAmount = TotalAmount || 0;
+    // Auto calculate totals if not provided
+    let calculatedTaxableAmount = taxableAmount || items.reduce((sum, item) => sum + (item.rate * item.qty), 0);
+    let calculatedTotalDiscount = totalDiscount || items.reduce((sum, item) => sum + (item.discount || 0), 0);
+    let calculatedVat = vat || items.reduce((sum, item) => sum + (item.tax || 0), 0);
+    let calculatedTotalAmount = TotalAmount || (calculatedTaxableAmount + calculatedVat - calculatedTotalDiscount);
 
-    if (!taxableAmount || !TotalAmount || !vat || !totalDiscount) {
-      calculatedTaxableAmount = items.reduce((sum, item) => sum + (item.rate * item.quantity), 0);
-      calculatedTotalDiscount = items.reduce((sum, item) => sum + (item.discount || 0), 0);
-      calculatedVat = items.reduce((sum, item) => sum + (item.tax || 0), 0);
-      calculatedTotalAmount = calculatedTaxableAmount + calculatedVat - calculatedTotalDiscount;
-    }
-
+    // Handle signature logic
     let signatureImage = null;
+    let savedSignatureId = null;
+
     if (sign_type === 'eSignature' && req.file) {
       signatureImage = req.file.path;
+    } else if (sign_type === 'digitalSignature' && signatureId) {
+      savedSignatureId = signatureId;
     }
 
+    // Create invoice
     const invoice = new Invoice({
       customerId,
       invoiceDate: new Date(invoiceDate),
@@ -72,15 +72,15 @@ const createInvoice = async (req, res) => {
         qty: item.qty,
         unit: item.unit,
         rate: item.rate,
-        discount: item.discount,
-        tax: item.tax,
+        discount: item.discount || 0,
+        tax: item.tax || 0,
         tax_group_id: item.tax_group_id,
-        amount: item.amount || (item.rate * item.quantity),
+        amount: item.amount || (item.rate * item.qty),
         discount_type: item.discount_type,
-        discount_value: item.discount_value,      
+        discount_value: item.discount_value
       })),
       status: 'UNPAID',
-      payment_method : 'CASH',
+      payment_method: payment_method || 'CASH',
       taxableAmount: req.body.subTotal || taxableAmount,
       TotalAmount: req.body.grandTotal || totalAmount,
       vat: req.body.totalTax || vat,
@@ -95,6 +95,7 @@ const createInvoice = async (req, res) => {
       sign_type: sign_type || 'none',
       signatureName: sign_type === 'eSignature' ? signatureName : null,
       signatureImage,
+      signatureId: sign_type === 'digitalSignature' ? savedSignatureId : null,
       billFrom,
       billTo,
       userId
@@ -113,7 +114,7 @@ const createInvoice = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
-    console.error(err);
+    console.error('Create invoice error:', err);
     res.status(500).json({ message: 'Error creating invoice', error: err.message });
   }
 };
@@ -149,6 +150,7 @@ const updateInvoice = async (req, res) => {
       recurring,
       sign_type,
       signatureName,
+      signatureId, // Added for digital signature
       billFrom,
       billTo,
       status
@@ -156,6 +158,14 @@ const updateInvoice = async (req, res) => {
 
     const invoiceId = req.params.id;
     const userId = req.user;
+
+    // Fetch existing invoice
+    const existingInvoice = await Invoice.findById(invoiceId).session(session);
+    if (!existingInvoice) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: 'Invoice not found' });
+    }
 
     // Calculate amounts if not provided
     let calculatedTaxableAmount = taxableAmount || 0;
@@ -170,16 +180,38 @@ const updateInvoice = async (req, res) => {
       calculatedTotalAmount = calculatedTaxableAmount + calculatedVat - calculatedTotalDiscount;
     }
 
-    // Handle signature image
-    let signatureImage;
-    if (sign_type === 'eSignature' && req.file) {
-      signatureImage = req.file.path;
-    } else {
-      // Get existing signature if not changing
-      const existingInvoice = await Invoice.findById(invoiceId).session(session);
-      signatureImage = existingInvoice?.signatureImage;
+    // Handle signature logic
+    let signatureImage = existingInvoice.signatureImage || null;
+    let updatedSignatureId = existingInvoice.signatureId || null;
+    let updatedSignatureName = existingInvoice.signatureName || null;
+
+    if (sign_type === 'eSignature') {
+      // Update or keep existing signature image
+      signatureImage = req.file ? req.file.path : existingInvoice.signatureImage;
+      updatedSignatureName = signatureName || existingInvoice.signatureName;
+      updatedSignatureId = null; // Clear digital signature link if switching
+    } 
+    else if (sign_type === 'digitalSignature') {
+      if (!signatureId) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({ message: 'Signature ID is required for digital signatures' });
+      }
+
+      // Validate the signature ID
+      const signatureExists = await Signature.findById(signatureId);
+      if (!signatureExists) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(404).json({ message: 'Digital Signature not found' });
+      }
+
+      updatedSignatureId = signatureId;
+      updatedSignatureName = null; // Not needed for digital
+      signatureImage = null;       // Clear eSignature image if switching
     }
 
+    // Prepare update data
     const updateData = {
       invoiceDate: new Date(invoiceDate),
       dueDate: new Date(dueDate),
@@ -212,8 +244,9 @@ const updateInvoice = async (req, res) => {
       recurringDuration: isRecurring ? recurringDuration : 0,
       recurring: isRecurring ? recurring : 'monthly',
       sign_type: sign_type || 'none',
-      signatureName: sign_type === 'eSignature' ? signatureName : null,
+      signatureName: updatedSignatureName,
       signatureImage,
+      signatureId: updatedSignatureId, // Save digital signature reference
       billFrom,
       billTo,
       userId
@@ -250,6 +283,7 @@ const updateInvoice = async (req, res) => {
   }
 };
 
+
 const getInvoice = async (req, res) => {
     try {
         const invoice = await Invoice.findById(req.params.id)
@@ -260,7 +294,8 @@ const getInvoice = async (req, res) => {
                 select: 'firstName lastName email phone profileImage address'
             })
             .populate('billTo', 'name email phone billingAddress image')
-            .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode');
+            .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode')
+            .populate('signatureId', 'signatureName signatureImage'); // Add signature population
 
         if (!invoice) {
             return res.status(404).json({
@@ -318,14 +353,23 @@ const getInvoice = async (req, res) => {
         } : null;
 
         // Signature details
-        const signatureImage = invoice.signatureImage
-            ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
-            : null;
+        let signatureDetails = null;
 
-        const signatureDetails = invoice.sign_type === 'eSignature' ? {
-            name: invoice.signatureName || null,
-            image: signatureImage
-        } : null;
+        if (invoice.sign_type === 'eSignature') {
+            signatureDetails = {
+                name: invoice.signatureName || null,
+                image: invoice.signatureImage
+                    ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
+                    : null
+            };
+        } else if (invoice.sign_type === 'digitalSignature' && invoice.signatureId) {
+            signatureDetails = {
+                name: invoice.signatureId.signatureName || null,
+                image: invoice.signatureId.signatureImage
+                    ? `${baseUrl}${invoice.signatureId.signatureImage.replace(/\\/g, '/')}`
+                    : null
+            };
+        }
 
         // Response object
         const responseData = {
@@ -344,7 +388,7 @@ const getInvoice = async (req, res) => {
             roundOff: invoice.roundOff,
             items: invoice.items, // keep raw items
             itemsCount: invoice.items.length,
-            billFrom: billFromDetails, // From User model
+            billFrom: billFromDetails,
             billTo: billToDetails,
             bank: bankDetails,
             notes: invoice.notes,

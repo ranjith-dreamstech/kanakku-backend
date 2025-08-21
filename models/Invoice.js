@@ -141,6 +141,10 @@ const invoiceSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  signatureId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Signature'
+  },
   signatureImage: {
     type: String,
     default: null
