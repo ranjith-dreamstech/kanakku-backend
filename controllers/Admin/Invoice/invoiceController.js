@@ -323,6 +323,7 @@ const getInvoice = async (req, res) => {
 
         // Bank details
         const bankDetails = invoice.bank ? {
+            id: invoice.bank.id || '',
             accountHoldername: invoice.bank.accountHoldername || '',
             bankName: invoice.bank.bankName || '',
             branchName: invoice.bank.branchName || '',
