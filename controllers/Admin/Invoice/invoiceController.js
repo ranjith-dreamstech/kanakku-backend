@@ -66,23 +66,18 @@ const createInvoice = async (req, res) => {
       dueDate: new Date(dueDate),
       referenceNo: referenceNo || '',
       items: items.map(item => ({
-        productId: item.productId,
+        id: item.productId,
         name: item.name,
         key: item.key,
-        quantity: item.quantity,
-        units: item.units,
+        qty: item.qty,
         unit: item.unit,
         rate: item.rate,
         discount: item.discount,
         tax: item.tax,
-        taxInfo: item.taxInfo,
+        tax_group_id: item.tax_group_id,
         amount: item.amount || (item.rate * item.quantity),
-        discountType: item.discountType,
-        isRateFormUpdated: item.isRateFormUpdated,
-        form_updated_discounttype: item.form_updated_discounttype,
-        form_updated_discount: item.form_updated_discount,
-        form_updated_rate: item.form_updated_rate,
-        form_updated_tax: item.form_updated_tax
+        discount_type: item.discount_type,
+        discount_value: item.discount_value,      
       })),
       status: 'UNPAID',
       payment_method : 'CASH',
@@ -264,8 +259,8 @@ const getInvoice = async (req, res) => {
     try {
         const invoice = await Invoice.findById(req.params.id)
             .populate('customerId', 'name email phone image billingAddress')
-            .populate('billFrom', 'name email phone companyName address image')  // Added image
-            .populate('billTo', 'name email phone billingAddress image')       // Added image
+            .populate('billFrom', 'name email phone companyName address image')
+            .populate('billTo', 'name email phone billingAddress image')
             .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode');
 
         if (!invoice) {
@@ -287,7 +282,7 @@ const getInvoice = async (req, res) => {
             return `${day}, ${month} ${year}`;
         };
 
-        // Customer details with image
+        // Customer details
         const customerDetails = invoice.customerId ? {
             id: invoice.customerId._id,
             name: invoice.customerId.name || '',
@@ -299,7 +294,6 @@ const getInvoice = async (req, res) => {
             billingAddress: invoice.customerId.billingAddress || null
         } : null;
 
-
         const billFromDetails = invoice.billFrom ? {
             id: invoice.billFrom._id,
             name: invoice.billFrom.name || '',
@@ -309,7 +303,6 @@ const getInvoice = async (req, res) => {
             address: invoice.billFrom.address || null
         } : null;
 
-        // BillTo details with image
         const billToDetails = invoice.billTo ? {
             id: invoice.billTo._id,
             name: invoice.billTo.name || '',
@@ -321,7 +314,6 @@ const getInvoice = async (req, res) => {
                 : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
         } : null;
 
-        // Bank details
         const bankDetails = invoice.bank ? {
             id: invoice.bank.id || '',
             accountHoldername: invoice.bank.accountHoldername || '',
@@ -331,7 +323,6 @@ const getInvoice = async (req, res) => {
             IFSCCode: invoice.bank.IFSCCode || ''
         } : null;
 
-        // Signature details
         const signatureImage = invoice.signatureImage 
             ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
             : null;
@@ -340,34 +331,6 @@ const getInvoice = async (req, res) => {
             name: invoice.signatureName || null,
             image: signatureImage
         } : null;
-
-        // Format items
-        const formattedItems = invoice.items.map(item => ({
-            id: item._id,
-            productId: item.productId?._id || null,
-            name: item.name || (item.productId?.name || ''),
-            description: item.productId?.description || '',
-            code: item.productId?.code || '',
-            key: item.key || 0,
-            quantity: item.quantity,
-            units: item.units,
-            unit: item.unit ? {
-                id: item.unit._id,
-                name: item.unit.name,
-                symbol: item.unit.symbol
-            } : null,
-            rate: item.rate,
-            discount: item.discount,
-            tax: item.tax,
-            taxInfo: item.taxInfo,
-            amount: item.amount,
-            discountType: item.discountType,
-            isRateFormUpdated: item.isRateFormUpdated,
-            form_updated_discounttype: item.form_updated_discounttype,
-            form_updated_discount: item.form_updated_discount,
-            form_updated_rate: item.form_updated_rate,
-            form_updated_tax: item.form_updated_tax
-        }));
 
         const responseData = {
             id: invoice._id,
@@ -383,7 +346,7 @@ const getInvoice = async (req, res) => {
             vat: invoice.vat,
             TotalAmount: invoice.TotalAmount,
             roundOff: invoice.roundOff,
-            items: formattedItems,
+            items: invoice.items,  // Use raw items
             itemsCount: invoice.items.length,
             billFrom: billFromDetails,
             billTo: billToDetails,
@@ -414,6 +377,7 @@ const getInvoice = async (req, res) => {
         });
     }
 };
+
 const getAllInvoices = async (req, res) => {
     try {
         const { 
