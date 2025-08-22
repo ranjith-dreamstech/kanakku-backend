@@ -577,6 +577,7 @@ const listQuotations = async (req, res) => {
                 sign_type: quotation.sign_type,
                 signature: signatureDetails,
                 convert_type: quotation.convert_type,
+                invoiceId: quotation.invoiceId ?? null,
                 createdAt: formatDate(quotation.createdAt),
                 updatedAt: formatDate(quotation.updatedAt)
             };

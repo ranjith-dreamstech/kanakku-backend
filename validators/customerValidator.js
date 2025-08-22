@@ -19,11 +19,6 @@ exports.createCustomerValidator = [
     .trim()
     .matches(/^[\d\s+-]+$/).withMessage("Please provide a valid phone number"),
     
-  body("website")
-    .optional()
-    .trim()
-    .isURL().withMessage("Please provide a valid website URL"),
-    
   body("status")
     .optional()
     .isIn(['Active', 'Inactive']).withMessage("Status must be either Active or Inactive"),

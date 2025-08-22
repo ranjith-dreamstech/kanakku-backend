@@ -436,7 +436,244 @@ const getAllInvoices = async (req, res) => {
         const userId = req.user._id;
         const skip = (page - 1) * limit;
 
-        const query = { isDeleted: false };
+        const query = { 
+           isDeleted: false,
+           parentInvoice: null
+         };
+
+        if (status && ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED', 'REFUNDED', 'PARTIALLY_PAID'].includes(status)) {
+            query.status = status;
+        }
+
+        if (customerId && mongoose.Types.ObjectId.isValid(customerId)) {
+            query.customerId = customerId;
+        }
+
+        if (payment_method) {
+            query.payment_method = payment_method;
+        }
+
+        if (startDate || endDate) {
+            query.invoiceDate = {};
+            if (startDate) query.invoiceDate.$gte = new Date(startDate);
+            if (endDate) query.invoiceDate.$lte = new Date(endDate);
+        }
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            query.$or = [
+                { invoiceNumber: searchRegex },
+                { referenceNo: searchRegex },
+                { 'items.name': searchRegex },
+                { notes: searchRegex },
+                { 'customerId.name': searchRegex }
+            ];
+        }
+
+        const total = await Invoice.countDocuments(query);
+
+        const invoices = await Invoice.find(query)
+            .populate('customerId', 'name email phone image')
+            .populate('billFrom', 'name email phone companyName')
+            .populate('billTo', 'name email phone billingAddress image')
+            .populate('bank', 'accountHoldername bankName branchName accountNumber IFSCCode')
+            .sort({ invoiceDate: -1 })
+            .skip(skip)
+            .limit(Number(limit));
+
+        // Get payments grouped by invoice
+        const invoiceIds = invoices.map(inv => inv._id);
+        const payments = await InvoicePayment.aggregate([
+            { $match: { invoiceId: { $in: invoiceIds } } },
+            { 
+                $group: { 
+                    _id: "$invoiceId",
+                    totalPaid: { $sum: "$amount" },
+                    lastPaymentDate: { $max: "$received_on" }
+                }
+            }
+        ]);
+
+        // Map payments to invoice IDs for quick lookup
+        const paymentMap = {};
+        payments.forEach(p => {
+            paymentMap[p._id.toString()] = {
+                totalPaid: p.totalPaid,
+                lastPaymentDate: p.lastPaymentDate
+            };
+        });
+
+        const lastInvoice = await Invoice.findOne()
+            .sort({ invoiceNumber: -1 })
+            .select('invoiceNumber');
+        
+        let nextInvoiceNumber = 'INV-000001';
+        if (lastInvoice && lastInvoice.invoiceNumber) {
+            const lastNumber = parseInt(lastInvoice.invoiceNumber.split('-')[1]);
+            nextInvoiceNumber = `INV-${String(lastNumber + 1).padStart(6, '0')}`;
+        }
+
+        const baseUrl = `${req.protocol}://${req.get('host')}/`;
+
+        const formattedInvoices = invoices.map((invoice) => {
+            const formatDate = (date) => {
+                if (!date) return null;
+                const d = new Date(date);
+                const day = d.getDate().toString().padStart(2, '0');
+                const month = d.toLocaleString('default', { month: 'short' });
+                const year = d.getFullYear();
+                return `${day}, ${month} ${year}`;
+            };
+
+            const customerDetails = invoice.customerId ? {
+                id: invoice.customerId._id,
+                name: invoice.customerId.name || '',
+                email: invoice.customerId.email || null,
+                phone: invoice.customerId.phone || null,
+                image: invoice.customerId.image 
+                    ? `${baseUrl}${invoice.customerId.image.replace(/\\/g, '/')}`
+                    : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer'
+            } : null;
+
+            const billFromDetails = invoice.billFrom ? {
+                id: invoice.billFrom._id,
+                name: invoice.billFrom.name || '',
+                email: invoice.billFrom.email || null,
+                phone: invoice.billFrom.phone || null,
+                companyName: invoice.billFrom.companyName || null
+            } : null;
+
+            const billToDetails = invoice.billTo ? {
+                id: invoice.billTo._id,
+                name: invoice.billTo.name || '',
+                email: invoice.billTo.email || null,
+                phone: invoice.billTo.phone || null,
+                billingAddress: invoice.billTo.billingAddress || null,
+                image: invoice.billTo.image 
+                      ? `${baseUrl}${invoice.billTo.image.replace(/\\/g, '/')}`
+                      : 'https://placehold.co/150x150/E0BBE4/FFFFFF?text=Customer' 
+            } : null;
+
+            const bankDetails = invoice.bank ? {
+                accountHoldername: invoice.bank.accountHoldername || '',
+                bankName: invoice.bank.bankName || '',
+                branchName: invoice.bank.branchName || '',
+                accountNumber: invoice.bank.accountNumber || '',
+                IFSCCode: invoice.bank.IFSCCode || ''
+            } : null;
+
+            const signatureImage = invoice.signatureImage 
+                ? `${baseUrl}${invoice.signatureImage.replace(/\\/g, '/')}`
+                : null;
+
+            const signatureDetails = invoice.sign_type === 'eSignature' ? {
+                name: invoice.signatureName || null,
+                image: signatureImage
+            } : null;
+
+            const formattedItems = invoice.items.map(item => ({
+                id: item._id,
+                productId: item.productId?._id || null,
+                name: item.name || (item.productId?.name || ''),
+                description: item.productId?.description || '',
+                key: item.key || 0,
+                quantity: item.quantity,
+                units: item.units,
+                unit: item.unit ? {
+                    id: item.unit._id,
+                    name: item.unit.name,
+                    symbol: item.unit.symbol
+                } : null,
+                rate: item.rate,
+                discount: item.discount,
+                tax: item.tax,
+                taxInfo: item.taxInfo,
+                amount: item.amount,
+                discountType: item.discountType
+            }));
+
+            // Payment info
+            const paymentInfo = paymentMap[invoice._id.toString()] || { totalPaid: 0, lastPaymentDate: null };
+
+            return {
+                id: invoice._id,
+                invoiceNumber: invoice.invoiceNumber,
+                customer: customerDetails,
+                invoiceDate: formatDate(invoice.invoiceDate),
+                dueDate: formatDate(invoice.dueDate),
+                referenceNo: invoice.referenceNo,
+                status: invoice.status,
+                payment_method: invoice.payment_method,
+                taxableAmount: invoice.taxableAmount,
+                totalDiscount: invoice.totalDiscount,
+                vat: invoice.vat,
+                TotalAmount: invoice.TotalAmount,
+                roundOff: invoice.roundOff,
+                totalPaid: paymentInfo.totalPaid,
+                remainingBalance: invoice.TotalAmount - paymentInfo.totalPaid,
+                lastPaymentDate: formatDate(paymentInfo.lastPaymentDate),
+                items: formattedItems,
+                itemsCount: invoice.items.length,
+                billFrom: billFromDetails,
+                billTo: billToDetails,
+                bank: bankDetails,
+                notes: invoice.notes,
+                termsAndCondition: invoice.termsAndCondition,
+                isRecurring: invoice.isRecurring,
+                recurring: invoice.isRecurring ? invoice.recurring : null,
+                recurringDuration: invoice.isRecurring ? invoice.recurringDuration : null,
+                sign_type: invoice.sign_type,
+                signature: signatureDetails,
+                createdAt: formatDate(invoice.createdAt),
+                updatedAt: formatDate(invoice.updatedAt)
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Invoices retrieved successfully',
+            data: {
+                invoices: formattedInvoices,
+                nextInvoiceNumber,
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalPages: Math.ceil(total / limit)
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error('List invoices error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching invoices',
+            error: err.message
+        });
+    }
+};
+
+const getChildInvoices = async (req, res) => {
+    try {
+        const { 
+            page = 1, 
+            limit = 10, 
+            status, 
+            search = '',
+            customerId,
+            startDate,
+            endDate,
+            payment_method
+        } = req.query;
+
+        const userId = req.user._id;
+        const skip = (page - 1) * limit;
+
+        const query = { 
+            isDeleted: false, 
+            parentInvoice: { $ne: null }
+        };
 
         if (status && ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED', 'REFUNDED', 'PARTIALLY_PAID'].includes(status)) {
             query.status = status;
@@ -922,6 +1159,7 @@ module.exports = {
   updateInvoice,
   getInvoice,
   getAllInvoices,
+  getChildInvoices,
   listInvoicesMinimal,
   convertQuotationToInvoice,
   recordInvoicePayment,

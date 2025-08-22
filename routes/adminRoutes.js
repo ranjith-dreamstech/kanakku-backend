@@ -202,6 +202,7 @@ router.delete('/invoices/:id', protect, invoiceController.deleteInvoice);
 router.post('/quotation-convert-to-invoice/:quotationId', protect, upload.single('signatureImage'), invoiceController.convertQuotationToInvoice);
 router.post('/invoice/payment', protect, invoiceController.recordInvoicePayment);
 router.get('/invoices-minimal', protect, invoiceController.listInvoicesMinimal);
+router.get('/invoices-recurring', protect, invoiceController.getChildInvoices);
 
 //Email Settings
 router.post("/email-settings", protect, emailSettingsController.createOrUpdateEmailSettings);
