@@ -83,8 +83,15 @@ const productSchema = new mongoose.Schema({
     }
 },
     {
-        timestamps: true
+        timestamps: true,
+        toJSON: { virtuals: true },
+        toObject: { virtuals: true }
     }
 );
 
+productSchema.virtual('productImageUrl').get(function () {
+    if (this.product_image) {
+        return `${process.env.BASE_URL}${this.product_image}`;
+    }
+})
 module.exports = mongoose.model('Product', productSchema);

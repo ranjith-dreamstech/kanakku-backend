@@ -35,7 +35,6 @@ exports.getAllProducts = async (req, res) => {
         // Build the base query
         const query = {};
         
-        // Only add search conditions if search term exists
         if (search && search.trim() !== '') {
             const searchRegex = new RegExp(search.trim(), 'i');
             
