@@ -56,16 +56,39 @@ exports.getAllTaxGroups = async (req, res) => {
 
 // Create new tax group
 exports.createTaxGroup = async (req, res) => {
-    try {
-        const { tax_name, tax_rate, tax_rate_ids } = req.body;
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-        const newGroup = new TaxGroup({ tax_name, tax_rate, tax_rate_ids });
-        await newGroup.save();
+  try {
+    const { tax_name, tax_rate, tax_rate_ids } = req.body;
 
-        res.status(201).json({ message: 'Tax group created successfully', data: newGroup });
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to create tax group', error: err.message });
-    }
+    const newGroup = new TaxGroup({
+      tax_name,
+      tax_rate,
+      tax_rate_ids
+    });
+
+    await newGroup.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      success: true,
+      message: 'Tax group created successfully',
+      data: newGroup
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error('Tax group creation error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create tax group',
+      error: err.message
+    });
+  }
 };
 
 // Get a single tax group
@@ -82,18 +105,44 @@ exports.getTaxGroupById = async (req, res) => {
 
 // Update a tax group
 exports.updateTaxGroup = async (req, res) => {
-    try {
-        const updated = await TaxGroup.findByIdAndUpdate(
-            req.params.id,
-            { $set: req.body },
-            { new: true, runValidators: true }
-        );
-        if (!updated) return res.status(404).json({ message: 'Tax group not found' });
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-        res.status(200).json({ message: 'Tax group updated successfully', data: updated });
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to update tax group', error: err.message });
+  try {
+    const updated = await TaxGroup.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true, session }
+    );
+
+    if (!updated) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: 'Tax group not found'
+      });
     }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      success: true,
+      message: 'Tax group updated successfully',
+      data: updated
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error('Tax group update error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update tax group',
+      error: err.message
+    });
+  }
 };
 
 // Delete a tax group

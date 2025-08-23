@@ -2,96 +2,116 @@ const BankDetail = require('@models/BankDetail');
 const User = require('@models/User');
 const mongoose = require('mongoose');
 
-// Create bank detail (existing)
+// Create bank detail with transaction
 const createBankDetail = async (req, res) => {
-    try {
-        const { 
-            accountHoldername,
-            bankName,
-            branchName,
-            accountNumber,
-            IFSCCode,
-            userId,
-            status = true // Default to true if not provided
-        } = req.body;
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-        // Check if user exists
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
-        }
+  try {
+    const {
+      accountHoldername,
+      bankName,
+      branchName,
+      accountNumber,
+      IFSCCode,
+      userId,
+      status = true
+    } = req.body;
 
-        // Create new bank detail
-        const bankDetail = new BankDetail({
-            accountHoldername,
-            bankName,
-            branchName,
-            accountNumber,
-            IFSCCode,
-            userId,
-            status,
-            isDeleted: false
-        });
-
-        await bankDetail.save();
-        
-        res.status(201).json({ 
-            success: true,
-            message: 'Bank detail created successfully', 
-            data: bankDetail
-        });
-    } catch (err) {
-        console.error('Bank detail creation error:', err);
-        res.status(500).json({ 
-            success: false,
-            message: 'Error creating bank detail',
-            error: err.message 
-        });
+    // Check if user exists
+    const user = await User.findById(userId).session(session);
+    if (!user) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
+
+    // Create new bank detail
+    const bankDetail = new BankDetail({
+      accountHoldername,
+      bankName,
+      branchName,
+      accountNumber,
+      IFSCCode,
+      userId,
+      status,
+      isDeleted: false
+    });
+
+    await bankDetail.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      success: true,
+      message: 'Bank detail created successfully',
+      data: bankDetail
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error('Bank detail creation error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating bank detail',
+      error: err.message
+    });
+  }
 };
 
-// Update bank detail
+// Update bank detail with transaction
 const updateBankDetail = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updates = req.body;
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-        // Remove fields that shouldn't be updated
-        delete updates._id;
-        delete updates.userId;
-        delete updates.createdAt;
-        delete updates.updatedAt;
-        delete updates.isDeleted;
+  try {
+    const { id } = req.params;
+    const updates = req.body;
 
-        const bankDetail = await BankDetail.findByIdAndUpdate(
-            id,
-            { $set: updates },
-            { new: true, runValidators: true }
-        );
+    // Remove fields that shouldn't be updated
+    delete updates._id;
+    delete updates.userId;
+    delete updates.createdAt;
+    delete updates.updatedAt;
+    delete updates.isDeleted;
 
-        if (!bankDetail || bankDetail.isDeleted) {
-            return res.status(404).json({
-                success: false,
-                message: 'Bank detail not found'
-            });
-        }
+    const bankDetail = await BankDetail.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true, runValidators: true, session }
+    );
 
-        res.status(200).json({
-            success: true,
-            message: 'Bank detail updated successfully',
-            data: bankDetail
-        });
-    } catch (err) {
-        console.error('Bank detail update error:', err);
-        res.status(500).json({ 
-            success: false,
-            message: 'Error updating bank detail',
-            error: err.message 
-        });
+    if (!bankDetail || bankDetail.isDeleted) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: 'Bank detail not found'
+      });
     }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      success: true,
+      message: 'Bank detail updated successfully',
+      data: bankDetail
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error('Bank detail update error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating bank detail',
+      error: err.message
+    });
+  }
 };
 
 // Get bank detail by ID
