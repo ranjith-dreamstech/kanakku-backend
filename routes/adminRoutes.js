@@ -171,6 +171,7 @@ router.patch('/bank-accounts/status/:id', updateBankDetailStatusValidator, BankD
 //company
 router.put('/company-details/:userId', protect, uploadCompanyFields, handleUploadError, updateCompanySettingsValidator, CompanySettings.updateCompanySettings);
 router.get('/company-details/:userId', protect, CompanySettings.getCompanySettings);
+router.get('/basic-details', protect, CompanySettings.getBasicDetails);
 //customer
 router.post('/customers', protect, upload.single('image'), createCustomerValidator, customerController.createCustomer);
 router.put('/customers/:id', protect, upload.single('image'), customerController.updateCustomer);

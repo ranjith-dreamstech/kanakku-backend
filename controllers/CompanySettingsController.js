@@ -1,6 +1,10 @@
 const CompanySettings = require('@models/CompanySettings');
 const mongoose = require('mongoose');
 const User = require('@models/User');
+const Currency = require('@models/Currency');
+const DateFormat = require('@models/DateFormat');
+const TimeFormat = require('@models/TimeFormat');
+const Timezone = require('@models/Timezone');
 const fs = require('fs');
 const path = require('path');
 
@@ -168,7 +172,7 @@ const updateCompanySettings = async (req, res) => {
             message: 'Company settings updated successfully',
             data: settingsData
         });
-
+        
     } catch (err) {
         console.error('Update company settings error:', err);
         
@@ -176,7 +180,7 @@ const updateCompanySettings = async (req, res) => {
             for (const fileType in req.files) {
                 if (req.files[fileType] && req.files[fileType][0]) {
                     const file = req.files[fileType][0];
-                    const filePath = path.join(__dirname, '../public/uploads/company', file.filename);
+                    const filePath = path.join(__dirname, '@public/uploads/company', file.filename);
                     if (fs.existsSync(filePath)) {
                         fs.unlinkSync(filePath);
                     }
@@ -192,7 +196,54 @@ const updateCompanySettings = async (req, res) => {
     }
 };
 
+const getBasicDetails = async (req, res) => {
+  try {
+    const userId = req.user || req.query.userId;
+    if (!userId) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    const [
+      defaultCurrency,
+      companySettings,
+      defaultDateFormat,
+      defaultTimeFormat,
+      defaultTimezone
+    ] = await Promise.all([
+      Currency.findOne({ isDeleted: false, isDefault: true }).lean(),
+      CompanySettings.findOne({ userId }).lean(),
+      DateFormat.findOne({ isDeleted: false, isActive: true }).sort({ createdAt: 1 }).lean(),
+      TimeFormat.findOne({ isDeleted: false, isActive: true }).sort({ createdAt: 1 }).lean(),
+      Timezone.findOne().sort({ createdAt: 1 }).lean()
+    ]);
+
+    const defaultDetails = {
+      defaultCurrency,
+      companySettings,
+      defaultDateFormat,
+      defaultTimeFormat,
+      defaultTimezone
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Default basic details fetched successfully',
+      data: defaultDetails
+    });
+
+  } catch (error) {
+    console.error('Error fetching basic details:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error. Please try again later.',
+      error: error.message
+    });
+  }
+};
+
+
 module.exports = {
     getCompanySettings,
-    updateCompanySettings
+    updateCompanySettings,
+    getBasicDetails
 };
